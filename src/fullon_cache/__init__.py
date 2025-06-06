@@ -98,7 +98,7 @@ For more information:
 - All docs: from fullon_cache.docs import get_all_docs
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "Fullon Project"
 __all__ = [
     # Core
