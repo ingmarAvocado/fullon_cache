@@ -517,7 +517,7 @@ Ultra-high-frequency ticker updates with uvloop optimization:
             self._last_flush = time.time()
             
         async def benchmark_performance(self, duration=10):
-            """Benchmark ticker update performance."""
+            # Benchmark ticker update performance
             import asyncio
             
             ticker_data = {"bid": 50000, "ask": 50001, "last": 50000.5}
@@ -568,5 +568,5 @@ Benchmark this yourself:
         print(f"Achieved {results['updates_per_second']:,.0f} updates/sec with {results['event_loop']}")
     
     # Run the benchmark
-    asyncio.run(run_benchmark())"""
+    asyncio.run(run_benchmark())
 """

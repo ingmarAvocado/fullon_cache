@@ -113,4 +113,4 @@ class TestImports:
         """Test version information."""
         import fullon_cache
         assert hasattr(fullon_cache, '__version__')
-        assert fullon_cache.__version__ == '0.1.0'
+        assert fullon_cache.__version__ == '0.2.0'

@@ -13,6 +13,14 @@ dependencies = [
     "redis[hiredis] (>=6.2.0,<7.0.0)"
 ]
 
+packages = [
+    { include = "fullon_cache", from = "src" }
+]
+include = [
+    { path = "py.typed", format = "sdist" },
+    { path = "src/fullon_cache/py.typed", format = "wheel" }
+]
+
 [project.optional-dependencies]
 uvloop = [
     "uvloop (>=0.20.0); sys_platform != 'win32'"
@@ -21,13 +29,6 @@ performance = [
     "uvloop (>=0.20.0); sys_platform != 'win32'",
     "cython",
     "hiredis"
-]
-packages = [
-    { include = "fullon_cache", from = "src" }
-]
-include = [
-    { path = "py.typed", format = "sdist" },
-    { path = "src/fullon_cache/py.typed", format = "wheel" }
 ]
 
 
@@ -44,6 +45,7 @@ pytest-order = "^1.2.0"
 ruff = "^0.11.12"
 mypy = "^1.16.0"
 types-redis = "^4.6.0.20241004"
+psutil = "^6.1.1"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

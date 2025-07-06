@@ -330,7 +330,7 @@ class TestUvloopPerformance:
     
     async def test_event_loop_benchmark(self):
         """Test event loop benchmarking utility."""
-        results = benchmark_current_policy(duration=0.1)  # Short benchmark for tests
+        results = await benchmark_current_policy(duration=0.1)  # Short benchmark for tests
         
         # Verify results structure
         assert 'policy' in results
@@ -393,7 +393,7 @@ class TestUvloopIntegration:
             
             # Order operations
             await orders_cache.push_open_order(f"order_{i}", f"local_{i}")
-            await orders_cache.pop_open_order()
+            await orders_cache.pop_open_order(f"order_{i}")
             
             # Account operations (if methods exist)
             try:

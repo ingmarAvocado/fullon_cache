@@ -252,7 +252,7 @@ class EventLoopManager:
         
         return info
     
-    def benchmark_policy(self, duration: float = 1.0) -> Dict[str, Any]:
+    async def benchmark_policy(self, duration: float = 1.0) -> Dict[str, Any]:
         """Run a simple benchmark of the current event loop policy.
         
         Args:
@@ -276,10 +276,18 @@ class EventLoopManager:
             return operations
         
         try:
-            # Run the benchmark
-            start_time = time.perf_counter()
-            operations = asyncio.run(benchmark_task())
-            total_time = time.perf_counter() - start_time
+            # Check if we're already in an event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an event loop, run directly
+                start_time = time.perf_counter()
+                operations = await benchmark_task()
+                total_time = time.perf_counter() - start_time
+            except RuntimeError:
+                # No running loop, use asyncio.run()
+                start_time = time.perf_counter()
+                operations = asyncio.run(benchmark_task())
+                total_time = time.perf_counter() - start_time
             
             return {
                 'policy': self._active_policy.value if self._active_policy else 'unknown',
@@ -359,7 +367,7 @@ def is_uvloop_active() -> bool:
     return manager.get_active_policy() == EventLoopPolicy.UVLOOP
 
 
-def benchmark_current_policy(duration: float = 1.0) -> Dict[str, Any]:
+async def benchmark_current_policy(duration: float = 1.0) -> Dict[str, Any]:
     """Benchmark the current event loop policy.
     
     Args:
@@ -369,4 +377,4 @@ def benchmark_current_policy(duration: float = 1.0) -> Dict[str, Any]:
         Dict with benchmark results
     """
     manager = get_event_loop_manager()
-    return manager.benchmark_policy(duration)
+    return await manager.benchmark_policy(duration)
