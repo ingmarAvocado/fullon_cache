@@ -12,6 +12,16 @@ dependencies = [
     "fullon-orm @ git+ssh://git@github.com/ingmarAvocado/fullon_orm.git",
     "redis[hiredis] (>=6.2.0,<7.0.0)"
 ]
+
+[project.optional-dependencies]
+uvloop = [
+    "uvloop (>=0.20.0); sys_platform != 'win32'"
+]
+performance = [
+    "uvloop (>=0.20.0); sys_platform != 'win32'",
+    "cython",
+    "hiredis"
+]
 packages = [
     { include = "fullon_cache", from = "src" }
 ]

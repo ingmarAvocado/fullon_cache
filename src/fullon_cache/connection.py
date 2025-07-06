@@ -1,7 +1,8 @@
-"""Redis connection pool management.
+"""Redis connection pool management with uvloop optimization.
 
 This module provides a singleton connection pool for efficient Redis connections.
-It handles connection configuration, pooling, and health checks.
+It handles connection configuration, pooling, health checks, and automatic
+uvloop optimization for maximum performance.
 """
 
 import os
@@ -14,6 +15,7 @@ from redis.asyncio.connection import ConnectionError as RedisConnectionError
 from dotenv import load_dotenv
 
 from .exceptions import ConnectionError, ConfigurationError
+from .event_loop import configure_event_loop, get_policy_info, EventLoopPolicy
 
 # Load environment variables
 load_dotenv()
@@ -22,15 +24,27 @@ logger = logging.getLogger(__name__)
 
 
 class ConnectionPool:
-    """Singleton Redis connection pool manager.
+    """Singleton Redis connection pool manager with uvloop optimization.
     
     This class manages a single connection pool instance that is shared
-    across all cache modules for efficient resource usage.
+    across all cache modules for efficient resource usage. It automatically
+    configures uvloop for maximum performance when available.
+    
+    Features:
+        - Automatic uvloop detection and configuration
+        - Performance-optimized connection pooling
+        - Platform-aware fallback to asyncio
+        - Connection health monitoring
+        - Memory and CPU efficient operations
     
     Example:
         pool = ConnectionPool()
         redis = await pool.get_connection()
         await redis.ping()
+        
+        # Check performance configuration
+        info = pool.get_performance_info()
+        print(f"Using {info['event_loop']} for optimal performance")
         
     Configuration via environment variables:
         REDIS_HOST: Redis server host (default: localhost)
@@ -40,6 +54,8 @@ class ConnectionPool:
         REDIS_MAX_CONNECTIONS: Max connections in pool (default: 50)
         REDIS_SOCKET_TIMEOUT: Socket timeout in seconds (default: 5)
         REDIS_SOCKET_CONNECT_TIMEOUT: Connection timeout (default: 5)
+        FULLON_CACHE_EVENT_LOOP: Event loop policy (auto/asyncio/uvloop)
+        FULLON_CACHE_AUTO_CONFIGURE: Auto-configure uvloop (default: true)
     """
     
     _instance: Optional['ConnectionPool'] = None
@@ -54,11 +70,12 @@ class ConnectionPool:
         return cls._instance
     
     def __init__(self):
-        """Initialize the connection pool with configuration."""
+        """Initialize the connection pool with configuration and uvloop optimization."""
         if self._initialized:
             return
             
         self._load_config()
+        self._configure_event_loop()
         self._initialized = True
     
     def _load_config(self) -> None:
@@ -72,6 +89,7 @@ class ConnectionPool:
             'socket_timeout': int(os.getenv('REDIS_SOCKET_TIMEOUT', 5)),
             'socket_connect_timeout': int(os.getenv('REDIS_SOCKET_CONNECT_TIMEOUT', 5)),
             'decode_responses': True,  # Always decode for consistency
+            'auto_configure_uvloop': os.getenv('FULLON_CACHE_AUTO_CONFIGURE', 'true').lower() == 'true',
         }
         
         # Validate configuration
@@ -86,6 +104,32 @@ class ConnectionPool:
                 f"Invalid Redis database number: {self._config['db']}", 
                 config_key='REDIS_DB'
             )
+    
+    def _configure_event_loop(self) -> None:
+        """Configure the optimal event loop policy for performance."""
+        if not self._config['auto_configure_uvloop']:
+            logger.debug("Auto-configuration of uvloop disabled by configuration")
+            return
+            
+        try:
+            # Configure the event loop for optimal performance
+            active_policy = configure_event_loop()
+            
+            if active_policy == EventLoopPolicy.UVLOOP:
+                logger.info("uvloop configured for optimal Redis performance")
+                # Increase max connections for uvloop due to better performance
+                original_max = self._config['max_connections']
+                self._config['max_connections'] = min(original_max * 2, 200)
+                logger.debug(
+                    f"Increased max connections from {original_max} to "
+                    f"{self._config['max_connections']} for uvloop"
+                )
+            else:
+                logger.info(f"Using {active_policy.value} event loop for Redis operations")
+                
+        except Exception as e:
+            logger.warning(f"Failed to configure optimal event loop: {e}")
+            # Continue with default asyncio
     
     def get_pool(self) -> RedisConnectionPool:
         """Get or create the Redis connection pool for the current event loop.
@@ -208,6 +252,35 @@ class ConnectionPool:
             Dict containing the current Redis configuration
         """
         return self._config.copy()
+    
+    def get_performance_info(self) -> Dict[str, Any]:
+        """Get detailed performance information about the connection pool.
+        
+        Returns:
+            Dict containing performance metrics and configuration details
+        """
+        info = {
+            'redis_config': self.get_config(),
+            'event_loop_info': get_policy_info(),
+            'pool_stats': {},
+        }
+        
+        # Add pool statistics for current event loop if available
+        try:
+            loop = asyncio.get_running_loop()
+            if loop in self._pools:
+                pool = self._pools[loop]
+                info['pool_stats'] = {
+                    'max_connections': pool.max_connections,
+                    'created_connections': pool.created_connections,
+                    'available_connections': len(pool._available_connections),
+                    'in_use_connections': len(pool._in_use_connections),
+                }
+        except (RuntimeError, AttributeError):
+            # Not in async context or pool doesn't have stats
+            pass
+        
+        return info
     
     @classmethod
     def reset(cls) -> None:
