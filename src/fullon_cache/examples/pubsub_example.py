@@ -6,7 +6,7 @@ This module demonstrates real-time ticker updates using Redis pub/sub.
 EXAMPLE = '''
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import random
 from typing import Dict, Any
 
@@ -33,7 +33,7 @@ async def ticker_publisher(cache: TickCache, exchange: str, symbols: list, durat
                 "ask": price + 0.5,
                 "last": price,
                 "volume": random.uniform(100, 1000),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
             # Update ticker (this also publishes to subscribers)

@@ -7,7 +7,7 @@ storing, retrieving, and managing cached data.
 EXAMPLE = '''
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fullon_cache import (
@@ -33,7 +33,7 @@ async def ticker_operations():
             "ask": 50001.0,
             "last": 50000.5,
             "volume": 1234.56,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
         print(f"Storing ticker: BTC/USDT @ ${ticker_data['last']}")

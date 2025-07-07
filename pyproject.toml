@@ -1,6 +1,6 @@
 [project]
 name = "fullon-cache"
-version = "0.3.0"
+version = "0.3.1"
 description = "Cache module for Fullon trading system"
 authors = [
     {name = "Fullon Project"}
@@ -60,6 +60,10 @@ markers = [
     "integration: marks tests as integration tests",
     "performance: marks tests as performance tests",
     "redis: marks tests that require Redis",
+]
+filterwarnings = [
+    # Suppress external library warnings while keeping our own code warnings
+    "ignore:datetime.datetime.utcnow.*:DeprecationWarning:fullon_orm.*",
 ]
 console_output_style = "progress"
 

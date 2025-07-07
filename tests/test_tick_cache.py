@@ -168,10 +168,11 @@ class TestTickCache:
     async def test_get_next_ticker_timeout(self, tick_cache, mock_base_cache):
         """Test get_next_ticker with timeout."""
         # Mock subscription that raises timeout
-        async def mock_subscribe(channel):
+        async def mock_subscribe():
             raise asyncio.TimeoutError()
+            yield  # This makes it an async generator
         
-        mock_base_cache.subscribe.return_value = mock_subscribe("test_channel")
+        mock_base_cache.subscribe.return_value = mock_subscribe()
         
         # Mock the recursive call to avoid infinite recursion in test
         with patch.object(tick_cache, 'get_next_ticker', return_value=(0, None)) as mock_recursive:

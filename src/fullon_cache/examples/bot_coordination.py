@@ -7,7 +7,7 @@ conflicts when trading the same symbols on exchanges.
 EXAMPLE = '''
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict
 
 from fullon_cache import BotCache
@@ -58,7 +58,7 @@ async def simulate_bot(bot_id: str, exchange: str, symbols: List[str], cache: Bo
     await cache.update_bot(bot_id, {
         "status": "completed",
         "traded_symbols": ",".join(traded_symbols),
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     })
     
     return traded_symbols

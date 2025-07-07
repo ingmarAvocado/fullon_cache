@@ -331,12 +331,16 @@ class TestBaseCachePatternOperations:
         assert len(scan_keys) == 10
         assert all(key.startswith("scan:") for key in scan_keys)
         
-        # Scan with count hint
+        # Scan with count hint - properly close async generator
         first_batch = []
-        async for key in base_cache.scan_keys("*", count=5):
-            first_batch.append(key)
-            if len(first_batch) >= 5:
-                break
+        scanner = base_cache.scan_keys("*", count=5)
+        try:
+            async for key in scanner:
+                first_batch.append(key)
+                if len(first_batch) >= 5:
+                    break
+        finally:
+            await scanner.aclose()
         assert len(first_batch) >= 5
     
     @pytest.mark.asyncio
@@ -419,10 +423,14 @@ class TestBaseCachePubSub:
         received = []
         
         async def subscriber():
-            async for message in base_cache.subscribe("test:channel"):
-                received.append(message)
-                if len(received) >= 3:
-                    break
+            subscription = base_cache.subscribe("test:channel")
+            try:
+                async for message in subscription:
+                    received.append(message)
+                    if len(received) >= 3:
+                        break
+            finally:
+                await subscription.aclose()
         
         # Start subscriber
         sub_task = asyncio.create_task(subscriber())
@@ -449,10 +457,14 @@ class TestBaseCachePubSub:
         received = []
         
         async def subscriber():
-            async for message in base_cache.subscribe("chan1", "chan2"):
-                received.append(message)
-                if len(received) >= 2:
-                    break
+            subscription = base_cache.subscribe("chan1", "chan2")
+            try:
+                async for message in subscription:
+                    received.append(message)
+                    if len(received) >= 2:
+                        break
+            finally:
+                await subscription.aclose()
         
         # Start subscriber
         sub_task = asyncio.create_task(subscriber())
@@ -473,8 +485,16 @@ class TestBaseCachePubSub:
     async def test_subscribe_no_channels(self, base_cache):
         """Test subscribing with no channels."""
         messages = []
-        async for msg in base_cache.subscribe():
-            messages.append(msg)
+        subscription = base_cache.subscribe()
+        
+        # Try to get the first message (should be None since no channels)
+        try:
+            first_msg = await subscription.__anext__()
+            messages.append(first_msg)
+        except StopAsyncIteration:
+            # Expected: no channels means no messages
+            pass
+        
         assert len(messages) == 0
 
 

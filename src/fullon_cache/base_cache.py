@@ -606,6 +606,7 @@ class BaseCache:
             PubSubError: If subscription fails
         """
         if not channels:
+            # Return empty async generator for no channels
             return
             
         redis_client = None

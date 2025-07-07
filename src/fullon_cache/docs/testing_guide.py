@@ -319,7 +319,7 @@ Create test data factories:
                 "ask": 50001.0,
                 "last": 50000.5,
                 "volume": 1234.56,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
             return {**defaults, **kwargs}
             

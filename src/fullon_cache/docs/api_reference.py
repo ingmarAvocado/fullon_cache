@@ -601,7 +601,7 @@ Example:
         "price": 50000,
         "size": 0.1,
         "side": "buy",
-        "timestamp": datetime.utcnow()
+        "timestamp": datetime.now(timezone.utc)
     })
     
     # Push user trade

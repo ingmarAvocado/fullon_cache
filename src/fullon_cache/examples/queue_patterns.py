@@ -6,7 +6,7 @@ This module demonstrates order and trade queue management patterns.
 EXAMPLE = '''
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 
 from fullon_cache import OrdersCache, TradesCache
@@ -41,7 +41,7 @@ async def order_queue_example():
                 "size": 0.1 * (i + 1),
                 "price": 50000 + (i * 100),
                 "status": "pending",
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
             await orders_cache.save_order_data("binance", oid, order_data)
             logger.info(f"Saved data for order {oid}")
@@ -86,7 +86,7 @@ async def trade_queue_example():
                 "price": 50000 + (i * 10),
                 "size": 0.01 * (i + 1),
                 "side": "buy" if i % 2 == 0 else "sell",
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
             count = await trades_cache.push_trade_list(symbol, exchange, trade)
             logger.info(f"Pushed trade {trade['id']}, list size: {count}")
@@ -122,7 +122,7 @@ async def trade_queue_example():
                 "size": 0.05,
                 "side": "buy",
                 "fee": 0.1,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
             await trades_cache.push_my_trades_list(uid, exchange, user_trade)
             logger.info(f"Pushed user trade {user_trade['id']}")
