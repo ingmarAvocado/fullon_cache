@@ -7,9 +7,11 @@ with real-time updates via Redis pub/sub.
 import asyncio
 import json
 import logging
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any
+
 from fullon_orm.models import Tick
 from fullon_orm.repositories import ExchangeRepository
+
 from .base_cache import BaseCache
 
 logger = logging.getLogger(__name__)
@@ -37,12 +39,12 @@ class TickCache:
         # Subscribe to updates
         price, timestamp = await cache.get_next_ticker("BTC/USDT", "binance")
     """
-    
+
     def __init__(self):
         """Initialize tick cache with BaseCache composition."""
         self._cache = BaseCache()
-    
-    async def get_price(self, symbol: str, exchange: Optional[str] = None) -> float:
+
+    async def get_price(self, symbol: str, exchange: str | None = None) -> float:
         """Get the price for a symbol, optionally using a specific exchange.
 
         Args:
@@ -62,7 +64,7 @@ class TickCache:
             logger.error(f"Error getting price for {symbol}: {e}")
             return 0
 
-    async def update_ticker(self, symbol: str, exchange: str, data: Dict[str, Any]) -> int:
+    async def update_ticker(self, symbol: str, exchange: str, data: dict[str, Any]) -> int:
         """Update the ticker data for a symbol on a specific exchange and notify subscribers.
 
         Args:
@@ -101,7 +103,7 @@ class TickCache:
             logger.error(f"Error deleting exchange ticker {exchange}: {e}")
             return 0
 
-    async def get_next_ticker(self, symbol: str, exchange: str) -> Tuple[float, Optional[str]]:
+    async def get_next_ticker(self, symbol: str, exchange: str) -> tuple[float, str | None]:
         """Subscribe to a ticker update channel and return the price and timestamp once a message is received.
         
         Args:
@@ -114,14 +116,14 @@ class TickCache:
         """
         try:
             channel = f'next_ticker:{exchange}:{symbol}'
-            
+
             async for message in self._cache.subscribe(channel):
                 if message and message.get('type') == 'message':
                     ticker = json.loads(message['data'])
                     return (float(ticker['price']), ticker['time'])
 
             return (0, None)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"No ticker ({exchange}:{symbol}) data received, trying again...")
             await asyncio.sleep(0.1)
             return await self.get_next_ticker(symbol=symbol, exchange=exchange)
@@ -144,7 +146,7 @@ class TickCache:
             async with get_async_session() as session:
                 exchange_repo = ExchangeRepository(session)
                 exchanges = await exchange_repo.get_cat_exchanges(all=True)
-                
+
             for exchange_obj in exchanges:
                 try:
                     ticker_data = await self._cache.hget(f"tickers:{exchange_obj.name}", symbol)
@@ -158,7 +160,7 @@ class TickCache:
             logger.error(f"Error in get_ticker_any: {e}")
             return 0
 
-    async def get_ticker(self, symbol: str, exchange: Optional[str] = None) -> Tuple[Optional[float], Optional[str]]:
+    async def get_ticker(self, symbol: str, exchange: str | None = None) -> tuple[float | None, str | None]:
         """Gets ticker from the database for a symbol, optionally from a specific exchange.
 
         Args:
@@ -180,19 +182,19 @@ class TickCache:
                 async with get_async_session() as session:
                     exchange_repo = ExchangeRepository(session)
                     exchanges = await exchange_repo.get_cat_exchanges(all=True)
-                    
+
                 for exchange_obj in exchanges:
                     ticker_data = await self._cache.hget(f"tickers:{exchange_obj.name}", symbol)
                     if ticker_data:
                         ticker = json.loads(ticker_data)
                         return (float(ticker['price']), ticker['time'])
-            
+
             return (0, None)
         except (TypeError, json.JSONDecodeError, Exception) as e:
             logger.error(f"Error getting ticker {symbol}: {e}")
             return (0, None)
 
-    async def get_tickers(self, exchange: Optional[str] = "") -> List[Tick]:
+    async def get_tickers(self, exchange: str | None = "") -> list[Tick]:
         """Gets all tickers from the database, from the specified exchange or all exchanges.
 
         Args:
@@ -203,7 +205,7 @@ class TickCache:
         """
         try:
             rows = []
-            
+
             if exchange:
                 exchanges = [exchange]
             else:
@@ -221,20 +223,20 @@ class TickCache:
                         values = json.loads(value)
                         values['exchange'] = exch
                         values['symbol'] = symbol
-                        
+
                         # Convert to fullon_orm Tick using from_dict
                         tick = Tick.from_dict(values)
                         rows.append(tick)
                     except (json.JSONDecodeError, TypeError, ValueError) as e:
                         logger.warning(f"Failed to parse ticker data for {exch}:{symbol}: {e}")
                         continue
-            
+
             return rows
         except Exception as e:
             logger.error(f"Error getting tickers: {e}")
             return []
 
-    async def get_tick_crawlers(self) -> Dict[str, Any]:
+    async def get_tick_crawlers(self) -> dict[str, Any]:
         """Get all tick crawlers that are supposed to be running.
 
         Returns:
@@ -257,13 +259,13 @@ class TickCache:
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to process data for {key}: {e}")
                     continue
-            
+
             return result
         except Exception as e:
             logger.error(f"Error connecting to Redis: {e}")
             raise ValueError("Failed to process tick crawlers data") from e
 
-    async def round_down(self, symbol: str, exchange: str, sizes: List[float], futures: bool) -> Tuple[float, float, float]:
+    async def round_down(self, symbol: str, exchange: str, sizes: list[float], futures: bool) -> tuple[float, float, float]:
         """Rounds down the sizes for a symbol on a specific exchange.
 
         Args:
@@ -278,23 +280,23 @@ class TickCache:
         try:
             if sizes[0] == 0 and sizes[1] == 0 and sizes[2] == 0:
                 return 0, 0, 0
-                
+
             if '/' in symbol:
                 currency = symbol.split('/')[0]
                 if currency == 'BTC' or futures:
                     return tuple(sizes)
             else:
                 return tuple(sizes)
-                
+
             price, _ = await self.get_ticker(exchange=exchange, symbol=symbol)
             if not price:
                 return 0, 0, 0
-                
+
             base_currency = symbol.split('/')[1]
             # Use USDT as stable coin default
             stable_coin = "USDT"
             tsymbol = f"{base_currency}/{stable_coin}"
-            
+
             for count, value in enumerate(sizes):
                 base = value * price
                 if 'USD' in base_currency:
@@ -303,10 +305,10 @@ class TickCache:
                     # Get conversion rate to stable coin
                     conversion_price = await self.get_price(tsymbol)
                     sizes[count] = base * conversion_price if conversion_price else 0
-                    
+
             if sizes[0] < 2:  # less than 2 usd in value
                 return 0, 0, 0
-                
+
             return tuple(sizes)
         except Exception as e:
             logger.error(f"Error in round_down for {symbol}: {e}")

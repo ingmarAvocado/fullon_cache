@@ -1,7 +1,8 @@
 """Trade factory for test data generation."""
 
-from datetime import datetime, timezone
-from typing import Optional, Dict, Any, Union
+from datetime import UTC, datetime
+from typing import Any
+
 from fullon_orm.models import Trade
 
 
@@ -22,11 +23,11 @@ class TradeType:
 
 class TradeFactory:
     """Factory for creating test trade data."""
-    
+
     def __init__(self):
         self._counter = 0
-    
-    def create(self, as_orm: bool = False, **kwargs) -> Union[Dict[str, Any], Trade]:
+
+    def create(self, as_orm: bool = False, **kwargs) -> dict[str, Any] | Trade:
         """Create trade data with defaults.
         
         Args:
@@ -55,8 +56,8 @@ class TradeFactory:
             )
         """
         self._counter += 1
-        timestamp = datetime.now(timezone.utc)
-        
+        timestamp = datetime.now(UTC)
+
         defaults = {
             "trade_id": f"TRD{timestamp.strftime('%Y%m%d%H%M%S')}{self._counter:06d}",
             "order_id": f"ORD{timestamp.strftime('%Y%m%d%H%M%S')}{self._counter:06d}",
@@ -76,26 +77,26 @@ class TradeFactory:
             "is_maker": False,
             "metadata": {}
         }
-        
+
         # Merge with provided kwargs
         result = defaults.copy()
         result.update(kwargs)
-        
+
         # Compute derived fields if not provided
         if result["cost"] is None:
             result["cost"] = result["amount"] * result["price"]
-            
+
         if result["fee"] is None:
             # Default 0.1% taker fee
             result["fee"] = result["cost"] * 0.001
-        
+
         # Return as ORM object if requested
         if as_orm:
             return Trade.from_dict(result)
-        
+
         return result
-    
-    def create_sell_trade(self, as_orm: bool = False, **kwargs) -> Union[Dict[str, Any], Trade]:
+
+    def create_sell_trade(self, as_orm: bool = False, **kwargs) -> dict[str, Any] | Trade:
         """Create a sell trade.
         
         Args:
@@ -110,8 +111,8 @@ class TradeFactory:
             side="sell",
             **kwargs
         )
-    
-    def create_futures_trade(self, **kwargs) -> Dict[str, Any]:
+
+    def create_futures_trade(self, **kwargs) -> dict[str, Any]:
         """Create a futures trade.
         
         Args:
@@ -126,8 +127,8 @@ class TradeFactory:
             fee_currency="USD",
             **kwargs
         )
-    
-    def create_maker_trade(self, **kwargs) -> Dict[str, Any]:
+
+    def create_maker_trade(self, **kwargs) -> dict[str, Any]:
         """Create a maker trade with lower fees.
         
         Args:
@@ -140,13 +141,13 @@ class TradeFactory:
             is_maker=True,
             **kwargs
         )
-        
+
         # Maker fee is typically lower
         if "fee" not in kwargs:
             trade["fee"] = trade["cost"] * 0.0005  # 0.05% maker fee
-        
+
         return trade
-    
+
     def create_batch_trades(self,
                            count: int,
                            symbol: str = "BTC/USDT",
@@ -168,11 +169,11 @@ class TradeFactory:
         trades = []
         min_price, max_price = price_range
         price_step = (max_price - min_price) / count if count > 1 else 0
-        
+
         for i in range(count):
             side = "buy" if i % 2 == 0 else "sell"
             price = min_price + (i * price_step)
-            
+
             trade = self.create(
                 symbol=symbol,
                 side=side,
@@ -182,9 +183,9 @@ class TradeFactory:
                 **kwargs
             )
             trades.append(trade)
-        
+
         return trades
-    
+
     def create_trade_history(self,
                             user_id: int,
                             symbol: str = "BTC/USDT",
@@ -203,22 +204,22 @@ class TradeFactory:
         """
         from datetime import timedelta
         trades = []
-        
+
         for day in range(days):
-            day_timestamp = datetime.now(timezone.utc) - timedelta(days=day)
-            
+            day_timestamp = datetime.now(UTC) - timedelta(days=day)
+
             for i in range(trades_per_day):
                 # Add some randomness to timestamps
                 trade_time = day_timestamp + timedelta(
                     hours=i * (24 / trades_per_day),
                     minutes=(i * 17) % 60  # Some pseudo-randomness
                 )
-                
+
                 # Vary price throughout the day
                 base_price = 50000 + (day * 100)  # Trend over days
                 daily_variation = (i - trades_per_day/2) * 10  # Daily variation
                 price = base_price + daily_variation
-                
+
                 trade = self.create(
                     user_id=user_id,
                     symbol=symbol,
@@ -228,9 +229,9 @@ class TradeFactory:
                     side="buy" if i % 3 != 0 else "sell"
                 )
                 trades.append(trade)
-        
+
         return trades
-    
+
     def create_arbitrage_trades(self,
                                symbol: str = "BTC/USDT",
                                exchanges: list = None,
@@ -247,13 +248,13 @@ class TradeFactory:
         """
         if exchanges is None:
             exchanges = ["binance", "kraken"]
-        
+
         if len(exchanges) < 2:
             raise ValueError("Need at least 2 exchanges for arbitrage")
-        
+
         base_price = 50000.0
         trades = []
-        
+
         # Buy on first exchange (lower price)
         buy_trade = self.create(
             exchange=exchanges[0],
@@ -263,7 +264,7 @@ class TradeFactory:
             amount=1.0
         )
         trades.append(buy_trade)
-        
+
         # Sell on second exchange (higher price)
         sell_trade = self.create(
             exchange=exchanges[1],
@@ -274,5 +275,5 @@ class TradeFactory:
             timestamp=buy_trade["timestamp"]  # Same time
         )
         trades.append(sell_trade)
-        
+
         return trades

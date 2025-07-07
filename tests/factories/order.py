@@ -1,16 +1,16 @@
 """Order factory for test data generation."""
 
-from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from datetime import UTC, datetime
+from typing import Any
 
 
 class OrderFactory:
     """Factory for creating test order data."""
-    
+
     def __init__(self):
         self._counter = 0
-    
-    def create(self, **kwargs) -> Dict[str, Any]:
+
+    def create(self, **kwargs) -> dict[str, Any]:
         """Create order data with defaults.
         
         Args:
@@ -28,8 +28,8 @@ class OrderFactory:
             )
         """
         self._counter += 1
-        timestamp = datetime.now(timezone.utc)
-        
+        timestamp = datetime.now(UTC)
+
         defaults = {
             "order_id": f"ORD{timestamp.strftime('%Y%m%d%H%M%S')}{self._counter:06d}",
             "exchange": "binance",
@@ -52,14 +52,14 @@ class OrderFactory:
             "plimit": None,
             "timestamp": timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
         }
-        
+
         # Merge with provided kwargs
         result = defaults.copy()
         result.update(kwargs)
-        
+
         return result
-    
-    def create_market_order(self, side: str = "buy", **kwargs) -> Dict[str, Any]:
+
+    def create_market_order(self, side: str = "buy", **kwargs) -> dict[str, Any]:
         """Create a market order.
         
         Args:
@@ -75,8 +75,8 @@ class OrderFactory:
             price=None,  # Market orders don't have price
             **kwargs
         )
-    
-    def create_stop_order(self, stop_price: float, **kwargs) -> Dict[str, Any]:
+
+    def create_stop_order(self, stop_price: float, **kwargs) -> dict[str, Any]:
         """Create a stop order.
         
         Args:
@@ -91,8 +91,8 @@ class OrderFactory:
             plimit=stop_price,
             **kwargs
         )
-    
-    def create_filled_order(self, fill_percent: float = 100.0, **kwargs) -> Dict[str, Any]:
+
+    def create_filled_order(self, fill_percent: float = 100.0, **kwargs) -> dict[str, Any]:
         """Create a partially or fully filled order.
         
         Args:
@@ -103,18 +103,18 @@ class OrderFactory:
             Filled order data
         """
         order = self.create(**kwargs)
-        
+
         filled_volume = order["volume"] * (fill_percent / 100)
         order["final_volume"] = filled_volume
-        
+
         if fill_percent >= 100:
             order["status"] = "filled"
         elif fill_percent > 0:
             order["status"] = "partially_filled"
-        
+
         return order
-    
-    def create_cancelled_order(self, reason: str = "User cancelled", **kwargs) -> Dict[str, Any]:
+
+    def create_cancelled_order(self, reason: str = "User cancelled", **kwargs) -> dict[str, Any]:
         """Create a cancelled order.
         
         Args:
@@ -129,9 +129,9 @@ class OrderFactory:
             reason=reason,
             **kwargs
         )
-    
-    def create_batch(self, 
-                    count: int, 
+
+    def create_batch(self,
+                    count: int,
                     exchange: str = "binance",
                     symbol: str = "BTC/USDT",
                     side_alternating: bool = True) -> list:
@@ -147,10 +147,10 @@ class OrderFactory:
             List of order dictionaries
         """
         orders = []
-        
+
         for i in range(count):
             side = "buy" if (i % 2 == 0 or not side_alternating) else "sell"
-            
+
             order = self.create(
                 exchange=exchange,
                 symbol=symbol,
@@ -161,10 +161,10 @@ class OrderFactory:
                 bot_id=1 + (i % 5)
             )
             orders.append(order)
-        
+
         return orders
-    
-    def create_order_book_snapshot(self, 
+
+    def create_order_book_snapshot(self,
                                   symbol: str = "BTC/USDT",
                                   mid_price: float = 50000.0,
                                   depth: int = 5,
@@ -182,7 +182,7 @@ class OrderFactory:
         """
         buy_orders = []
         sell_orders = []
-        
+
         for i in range(depth):
             # Buy orders below mid price
             buy_order = self.create(
@@ -192,7 +192,7 @@ class OrderFactory:
                 volume=0.5 * (i + 1)
             )
             buy_orders.append(buy_order)
-            
+
             # Sell orders above mid price
             sell_order = self.create(
                 symbol=symbol,
@@ -201,5 +201,5 @@ class OrderFactory:
                 volume=0.5 * (i + 1)
             )
             sell_orders.append(sell_order)
-        
+
         return buy_orders, sell_orders

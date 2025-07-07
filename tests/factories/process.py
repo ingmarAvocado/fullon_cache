@@ -1,17 +1,18 @@
 """Process factory for test data generation."""
 
-from datetime import datetime, timezone
-from typing import Optional, Dict, Any
-from fullon_cache.process_cache import ProcessType, ProcessStatus
+from datetime import UTC, datetime
+from typing import Any
+
+from fullon_cache.process_cache import ProcessStatus, ProcessType
 
 
 class ProcessFactory:
     """Factory for creating test process data."""
-    
+
     def __init__(self):
         self._counter = 0
-    
-    def create(self, **kwargs) -> Dict[str, Any]:
+
+    def create(self, **kwargs) -> dict[str, Any]:
         """Create process data with defaults.
         
         Args:
@@ -28,7 +29,7 @@ class ProcessFactory:
             )
         """
         self._counter += 1
-        
+
         defaults = {
             "process_type": ProcessType.BOT,
             "component": f"test_component_{self._counter}",
@@ -36,24 +37,24 @@ class ProcessFactory:
             "message": "Test process",
             "status": ProcessStatus.RUNNING,
         }
-        
+
         # Handle string types
         if "process_type" in kwargs and isinstance(kwargs["process_type"], str):
             kwargs["process_type"] = ProcessType(kwargs["process_type"])
         if "status" in kwargs and isinstance(kwargs["status"], str):
             kwargs["status"] = ProcessStatus(kwargs["status"])
-        
+
         # Merge with provided kwargs
         result = defaults.copy()
         result.update(kwargs)
-        
+
         return result
-    
-    def create_bot_process(self, 
+
+    def create_bot_process(self,
                           bot_name: str,
                           symbol: str = "BTC/USDT",
                           exchange: str = "binance",
-                          **kwargs) -> Dict[str, Any]:
+                          **kwargs) -> dict[str, Any]:
         """Create a bot process.
         
         Args:
@@ -77,11 +78,11 @@ class ProcessFactory:
             message=f"Bot {bot_name} started on {exchange}:{symbol}",
             **kwargs
         )
-    
+
     def create_crawler_process(self,
                               crawler_type: str = "tick",
                               exchanges: list = None,
-                              **kwargs) -> Dict[str, Any]:
+                              **kwargs) -> dict[str, Any]:
         """Create a crawler process.
         
         Args:
@@ -94,7 +95,7 @@ class ProcessFactory:
         """
         if exchanges is None:
             exchanges = ["binance", "kraken"]
-            
+
         return self.create(
             process_type=ProcessType.CRAWLER,
             component=f"{crawler_type}_crawler",
@@ -107,10 +108,10 @@ class ProcessFactory:
             message=f"Crawler {crawler_type} monitoring {len(exchanges)} exchanges",
             **kwargs
         )
-    
+
     def create_service_process(self,
                               service_type: str,
-                              **kwargs) -> Dict[str, Any]:
+                              **kwargs) -> dict[str, Any]:
         """Create a service process.
         
         Args:
@@ -126,9 +127,9 @@ class ProcessFactory:
             "account": ProcessType.ACCOUNT,
             "order": ProcessType.ORDER,
         }
-        
+
         process_type = process_type_map.get(service_type, ProcessType.BOT_STATUS_SERVICE)
-        
+
         return self.create(
             process_type=process_type,
             component=f"{service_type}_service",
@@ -140,10 +141,10 @@ class ProcessFactory:
             message=f"{service_type} service initialized",
             **kwargs
         )
-    
+
     def create_error_process(self,
                             error_message: str = "Process encountered an error",
-                            **kwargs) -> Dict[str, Any]:
+                            **kwargs) -> dict[str, Any]:
         """Create a process in error state.
         
         Args:
@@ -158,13 +159,13 @@ class ProcessFactory:
             message=error_message,
             params={
                 "error": True,
-                "error_time": datetime.now(timezone.utc).isoformat(),
+                "error_time": datetime.now(UTC).isoformat(),
                 "error_details": kwargs.pop("error_details", "Test error")
             },
             **kwargs
         )
-    
-    def create_stale_process(self, minutes_old: int = 60, **kwargs) -> Dict[str, Any]:
+
+    def create_stale_process(self, minutes_old: int = 60, **kwargs) -> dict[str, Any]:
         """Create a stale process.
         
         Args:
@@ -175,8 +176,8 @@ class ProcessFactory:
             Stale process data
         """
         from datetime import timedelta
-        old_time = datetime.now(timezone.utc) - timedelta(minutes=minutes_old)
-        
+        old_time = datetime.now(UTC) - timedelta(minutes=minutes_old)
+
         return self.create(
             status=ProcessStatus.IDLE,
             message="Process is stale",
@@ -186,8 +187,8 @@ class ProcessFactory:
             },
             **kwargs
         )
-    
-    def create_batch(self, 
+
+    def create_batch(self,
                     count: int,
                     process_types: list = None,
                     statuses: list = None) -> list:
@@ -203,16 +204,16 @@ class ProcessFactory:
         """
         if process_types is None:
             process_types = [ProcessType.BOT, ProcessType.CRAWLER, ProcessType.ORDER]
-        
+
         if statuses is None:
             statuses = [ProcessStatus.RUNNING, ProcessStatus.IDLE, ProcessStatus.PROCESSING]
-        
+
         processes = []
-        
+
         for i in range(count):
             process_type = process_types[i % len(process_types)]
             status = statuses[i % len(statuses)]
-            
+
             process = self.create(
                 process_type=process_type,
                 component=f"{process_type.value}_component_{i}",
@@ -224,5 +225,5 @@ class ProcessFactory:
                 message=f"Batch process {i} of {count}"
             )
             processes.append(process)
-        
+
         return processes

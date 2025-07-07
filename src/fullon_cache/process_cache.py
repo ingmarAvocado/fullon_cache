@@ -6,12 +6,12 @@ including bots, crawlers, order processors, and other components.
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Any, Set
+from datetime import UTC, datetime, timedelta
 from enum import Enum
+from typing import Any
 
 from .base_cache import BaseCache
-from .exceptions import CacheError, SerializationError
+from .exceptions import CacheError
 
 logger = logging.getLogger(__name__)
 
@@ -76,17 +76,17 @@ class ProcessCache:
             since_minutes=5
         )
     """
-    
+
     def __init__(self):
         """Initialize the process cache."""
         self._cache = BaseCache(key_prefix="process")
-        
+
     async def register_process(
         self,
         process_type: ProcessType,
         component: str,
-        params: Optional[Dict[str, Any]] = None,
-        message: Optional[str] = None,
+        params: dict[str, Any] | None = None,
+        message: str | None = None,
         status: ProcessStatus = ProcessStatus.STARTING
     ) -> str:
         """Register a new process.
@@ -113,9 +113,9 @@ class ProcessCache:
             )
         """
         # Generate unique process ID
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         process_id = f"{process_type.value}:{component}:{timestamp.timestamp()}"
-        
+
         # Process data
         process_data = {
             "process_id": process_id,
@@ -128,7 +128,7 @@ class ProcessCache:
             "updated_at": timestamp.isoformat(),
             "heartbeat": timestamp.isoformat(),
         }
-        
+
         try:
             # Store process data
             await self._cache.set_json(
@@ -136,34 +136,34 @@ class ProcessCache:
                 process_data,
                 ttl=86400  # 24 hour TTL
             )
-            
+
             # Add to active set
             await self._cache.hset(
                 f"active:{process_type.value}",
                 process_id,
                 timestamp.isoformat()
             )
-            
+
             # Add to component index
             await self._cache.hset(
                 "components",
                 component,
                 process_id
             )
-            
+
             logger.debug(f"Registered process: {process_id}")
             return process_id
-            
+
         except Exception as e:
             logger.error(f"Failed to register process: {e}")
             raise CacheError(f"Failed to register process: {str(e)}")
-    
+
     async def update_process(
         self,
         process_id: str,
-        status: Optional[ProcessStatus] = None,
-        message: Optional[str] = None,
-        params: Optional[Dict[str, Any]] = None,
+        status: ProcessStatus | None = None,
+        message: str | None = None,
+        params: dict[str, Any] | None = None,
         heartbeat: bool = True
     ) -> bool:
         """Update process status and information.
@@ -190,23 +190,23 @@ class ProcessCache:
         if not process_data:
             logger.warning(f"Process not found: {process_id}")
             return False
-        
+
         # Update fields
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         process_data["updated_at"] = timestamp.isoformat()
-        
+
         if heartbeat:
             process_data["heartbeat"] = timestamp.isoformat()
-            
+
         if status:
             process_data["status"] = status.value
-            
+
         if message:
             process_data["message"] = message
-            
+
         if params:
             process_data["params"].update(params)
-        
+
         try:
             # Save updated data
             await self._cache.set_json(
@@ -214,21 +214,21 @@ class ProcessCache:
                 process_data,
                 ttl=86400  # Reset TTL
             )
-            
+
             # Update active timestamp
             await self._cache.hset(
                 f"active:{process_data['process_type']}",
                 process_id,
                 timestamp.isoformat()
             )
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to update process {process_id}: {e}")
             return False
-    
-    async def get_process(self, process_id: str) -> Optional[Dict[str, Any]]:
+
+    async def get_process(self, process_id: str) -> dict[str, Any] | None:
         """Get process information.
         
         Args:
@@ -238,14 +238,14 @@ class ProcessCache:
             Process data dictionary or None if not found
         """
         return await self._cache.get_json(f"data:{process_id}")
-    
+
     async def get_active_processes(
         self,
-        process_type: Optional[ProcessType] = None,
-        component: Optional[str] = None,
+        process_type: ProcessType | None = None,
+        component: str | None = None,
         since_minutes: int = 5,
         include_heartbeat_check: bool = True
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get active processes filtered by criteria.
         
         Args:
@@ -270,19 +270,19 @@ class ProcessCache:
             )
         """
         active_processes = []
-        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
-        
+        cutoff_time = datetime.now(UTC) - timedelta(minutes=since_minutes)
+
         # Determine which process types to check
         if process_type:
             types_to_check = [process_type]
         else:
             types_to_check = list(ProcessType)
-        
+
         # Check each process type
         for ptype in types_to_check:
             # Get all processes of this type
             processes = await self._cache.hgetall(f"active:{ptype.value}")
-            
+
             for process_id, timestamp_str in processes.items():
                 # Check if process is recent enough
                 try:
@@ -291,16 +291,16 @@ class ProcessCache:
                         continue
                 except (ValueError, TypeError):
                     continue
-                
+
                 # Get full process data
                 process_data = await self.get_process(process_id)
                 if not process_data:
                     continue
-                
+
                 # Apply filters
                 if component and process_data.get("component") != component:
                     continue
-                
+
                 # Check heartbeat if requested
                 if include_heartbeat_check:
                     try:
@@ -312,18 +312,18 @@ class ProcessCache:
                             process_data["_heartbeat_stale"] = False
                     except (ValueError, TypeError, KeyError):
                         process_data["_heartbeat_stale"] = True
-                
+
                 active_processes.append(process_data)
-        
+
         # Sort by updated_at descending
         active_processes.sort(
             key=lambda p: p.get("updated_at", ""),
             reverse=True
         )
-        
+
         return active_processes
-    
-    async def stop_process(self, process_id: str, message: Optional[str] = None) -> bool:
+
+    async def stop_process(self, process_id: str, message: str | None = None) -> bool:
         """Mark a process as stopped.
         
         Args:
@@ -336,7 +336,7 @@ class ProcessCache:
         process_data = await self.get_process(process_id)
         if not process_data:
             return False
-        
+
         # Update status to stopped
         await self.update_process(
             process_id=process_id,
@@ -344,19 +344,19 @@ class ProcessCache:
             message=message or "Process stopped",
             heartbeat=False
         )
-        
+
         # Remove from active set
         await self._cache.hdel(
             f"active:{process_data['process_type']}",
             process_id
         )
-        
+
         # Remove from component index
         await self._cache.hdel("components", process_data["component"])
-        
+
         logger.debug(f"Stopped process: {process_id}")
         return True
-    
+
     async def cleanup_stale_processes(self, stale_minutes: int = 30) -> int:
         """Clean up stale processes that haven't updated recently.
         
@@ -367,11 +367,11 @@ class ProcessCache:
             Number of processes cleaned up
         """
         cleaned = 0
-        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
-        
+        cutoff_time = datetime.now(UTC) - timedelta(minutes=stale_minutes)
+
         for process_type in ProcessType:
             processes = await self._cache.hgetall(f"active:{process_type.value}")
-            
+
             for process_id, timestamp_str in processes.items():
                 try:
                     last_update = datetime.fromisoformat(timestamp_str)
@@ -393,17 +393,17 @@ class ProcessCache:
                     # Invalid timestamp, remove
                     await self._cache.hdel(f"active:{process_type.value}", process_id)
                     cleaned += 1
-        
+
         if cleaned > 0:
             logger.debug(f"Cleaned up {cleaned} stale processes")
-            
+
         return cleaned
-    
+
     async def get_process_history(
         self,
         component: str,
         limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get process history for a component.
         
         Args:
@@ -416,8 +416,8 @@ class ProcessCache:
         # This would typically query from a database
         # For now, return empty as we only track active processes
         return []
-    
-    async def get_component_status(self, component: str) -> Optional[Dict[str, Any]]:
+
+    async def get_component_status(self, component: str) -> dict[str, Any] | None:
         """Get current status of a component.
         
         Args:
@@ -430,10 +430,10 @@ class ProcessCache:
         process_id = await self._cache.hget("components", component)
         if not process_id:
             return None
-            
+
         return await self.get_process(process_id)
-    
-    async def get_system_health(self) -> Dict[str, Any]:
+
+    async def get_system_health(self) -> dict[str, Any]:
         """Get overall system health based on process status.
         
         Returns:
@@ -447,43 +447,43 @@ class ProcessCache:
             "stale_processes": 0,
             "error_processes": 0,
         }
-        
+
         # Get all active processes
         processes = await self.get_active_processes(
             since_minutes=60,  # Check last hour
             include_heartbeat_check=True
         )
-        
+
         health["total_processes"] = len(processes)
-        
+
         # Count by type and status
         for process in processes:
             # By type
             ptype = process.get("process_type", "unknown")
             health["by_type"][ptype] = health["by_type"].get(ptype, 0) + 1
-            
+
             # By status
             status = process.get("status", "unknown")
             health["by_status"][status] = health["by_status"].get(status, 0) + 1
-            
+
             # Check for issues
             if process.get("_heartbeat_stale"):
                 health["stale_processes"] += 1
-                
+
             if status == ProcessStatus.ERROR.value:
                 health["error_processes"] += 1
-        
+
         # Determine overall health
         if health["error_processes"] > 0 or health["stale_processes"] > 0:
             health["healthy"] = False
-            
+
         return health
-    
+
     async def broadcast_message(
         self,
         process_type: ProcessType,
         message: str,
-        data: Optional[Dict[str, Any]] = None
+        data: dict[str, Any] | None = None
     ) -> int:
         """Broadcast a message to all processes of a type.
         
@@ -498,16 +498,16 @@ class ProcessCache:
             Number of potential recipients
         """
         channel = f"process:broadcast:{process_type.value}"
-        
+
         payload = {
             "message": message,
             "data": data or {},
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
-        
+
         return await self._cache.publish(channel, json.dumps(payload))
-    
-    async def get_metrics(self) -> Dict[str, Any]:
+
+    async def get_metrics(self) -> dict[str, Any]:
         """Get process cache metrics.
         
         Returns:
@@ -518,27 +518,27 @@ class ProcessCache:
             "active_processes": 0,
             "components": 0,
         }
-        
+
         # Count processes by type
         for process_type in ProcessType:
             count = len(await self._cache.hgetall(f"active:{process_type.value}"))
             metrics[f"active_{process_type.value}"] = count
             metrics["active_processes"] += count
-        
+
         # Count total components
         metrics["components"] = len(await self._cache.hgetall("components"))
-        
+
         # Count total process data entries
         process_count = 0
         async for _ in self._cache.scan_keys("data:*"):
             process_count += 1
         metrics["total_processes"] = process_count
-        
+
         return metrics
-    
+
     # Legacy methods for backward compatibility
-    
-    async def delete_from_top(self, component: Optional[str] = None) -> int:
+
+    async def delete_from_top(self, component: str | None = None) -> int:
         """Legacy method: Delete a process entry from the top of the cache.
         
         Args:
@@ -561,8 +561,8 @@ class ProcessCache:
                     deleted += 1
             return deleted
         return 0
-    
-    async def get_top(self, deltatime: Optional[int] = None, comp: Optional[str] = None) -> List[dict]:
+
+    async def get_top(self, deltatime: int | None = None, comp: str | None = None) -> list[dict]:
         """Legacy method: Get processes with optional time and component filters.
         
         Args:
@@ -577,19 +577,19 @@ class ProcessCache:
             This is a legacy method. Use get_active_processes() for new code.
         """
         rows = []
-        
+
         # Convert deltatime to minutes for get_active_processes
         if deltatime:
             since_minutes = deltatime / 60
         else:
             since_minutes = 60 * 24  # Default to 24 hours
-            
+
         # Get processes
         processes = await self.get_active_processes(
             since_minutes=since_minutes,
             include_heartbeat_check=False
         )
-        
+
         for process in processes:
             # Convert to legacy format
             obj = {
@@ -599,15 +599,15 @@ class ProcessCache:
                 "message": process.get("message", ""),
                 "timestamp": process.get("updated_at", process.get("created_at", ""))
             }
-            
+
             # Apply filters
             if comp and obj["type"] != comp:
                 continue
-                
+
             rows.append(obj)
-            
+
         return rows
-    
+
     async def update_process_legacy(self, tipe: str, key: str, message: str = "") -> bool:
         """Legacy method: Update a process entry in the cache.
         
@@ -625,7 +625,7 @@ class ProcessCache:
         """
         # Find existing process
         component_process = await self.get_component_status(key)
-        
+
         if component_process:
             # Update existing - use the modern update_process method
             return await self.update_process(
@@ -648,13 +648,13 @@ class ProcessCache:
             except ValueError:
                 logger.error(f"Invalid process type: {tipe}")
                 return False
-    
+
     async def new_process(
         self,
         tipe: str,
         key: str,
-        params: Dict[str, Any],
-        pid: Optional[Any] = None,
+        params: dict[str, Any],
+        pid: Any | None = None,
         message: str = ""
     ) -> int:
         """Legacy method: Add a new process entry to the cache.
@@ -685,8 +685,8 @@ class ProcessCache:
         except ValueError:
             logger.error(f"Invalid process type: {tipe}")
             return 0
-    
-    async def get_process_legacy(self, tipe: str, key: str) -> Dict[str, Any]:
+
+    async def get_process_legacy(self, tipe: str, key: str) -> dict[str, Any]:
         """Legacy method: Get process information from Redis.
         
         Args:
@@ -710,7 +710,7 @@ class ProcessCache:
                 "timestamp": component_process.get("updated_at", "")
             }
         return {}
-    
+
     async def delete_process(self, tipe: str, key: str = '') -> bool:
         """Legacy method: Delete a process from the cache.
         

@@ -1,16 +1,16 @@
 """Bot factory for test data generation."""
 
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 class BotFactory:
     """Factory for creating test bot data."""
-    
+
     def __init__(self):
         self._counter = 0
-    
-    def create(self, **kwargs) -> Dict[str, Any]:
+
+    def create(self, **kwargs) -> dict[str, Any]:
         """Create bot data with defaults.
         
         Args:
@@ -28,7 +28,7 @@ class BotFactory:
             )
         """
         self._counter += 1
-        
+
         defaults = {
             "bot_id": self._counter,
             "name": f"test_bot_{self._counter}",
@@ -52,22 +52,22 @@ class BotFactory:
             },
             "active": True,
             "opening_position": False,
-            "last_heartbeat": datetime.now(timezone.utc).isoformat(),
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "last_heartbeat": datetime.now(UTC).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
-        
+
         # Merge with provided kwargs
         result = defaults.copy()
         result.update(kwargs)
-        
+
         return result
-    
+
     def create_grid_bot(self,
                        symbol: str = "BTC/USDT",
                        grid_levels: int = 20,
                        price_range: tuple = (45000, 55000),
-                       **kwargs) -> Dict[str, Any]:
+                       **kwargs) -> dict[str, Any]:
         """Create a grid trading bot.
         
         Args:
@@ -80,7 +80,7 @@ class BotFactory:
             Grid bot data
         """
         min_price, max_price = price_range
-        
+
         return self.create(
             strategy="grid",
             symbols=[symbol],
@@ -94,12 +94,12 @@ class BotFactory:
             },
             **kwargs
         )
-    
+
     def create_arbitrage_bot(self,
-                            exchanges: List[str] = None,
-                            symbols: List[str] = None,
+                            exchanges: list[str] = None,
+                            symbols: list[str] = None,
                             min_profit: float = 0.1,
-                            **kwargs) -> Dict[str, Any]:
+                            **kwargs) -> dict[str, Any]:
         """Create an arbitrage bot.
         
         Args:
@@ -115,7 +115,7 @@ class BotFactory:
             exchanges = ["binance", "kraken", "coinbase"]
         if symbols is None:
             symbols = ["BTC/USDT", "ETH/USDT"]
-        
+
         return self.create(
             strategy="arbitrage",
             exchanges=exchanges,
@@ -128,12 +128,12 @@ class BotFactory:
             },
             **kwargs
         )
-    
+
     def create_dca_bot(self,
                       symbol: str = "BTC/USDT",
                       interval_hours: int = 24,
                       amount_per_order: float = 100.0,
-                      **kwargs) -> Dict[str, Any]:
+                      **kwargs) -> dict[str, Any]:
         """Create a DCA (Dollar Cost Averaging) bot.
         
         Args:
@@ -158,11 +158,11 @@ class BotFactory:
             },
             **kwargs
         )
-    
+
     def create_market_maker_bot(self,
                                symbol: str = "BTC/USDT",
                                spread: float = 0.1,
-                               **kwargs) -> Dict[str, Any]:
+                               **kwargs) -> dict[str, Any]:
         """Create a market maker bot.
         
         Args:
@@ -187,8 +187,8 @@ class BotFactory:
             },
             **kwargs
         )
-    
-    def create_stopped_bot(self, stop_reason: str = "User stopped", **kwargs) -> Dict[str, Any]:
+
+    def create_stopped_bot(self, stop_reason: str = "User stopped", **kwargs) -> dict[str, Any]:
         """Create a stopped bot.
         
         Args:
@@ -203,16 +203,16 @@ class BotFactory:
             active=False,
             config={
                 "stop_reason": stop_reason,
-                "stopped_at": datetime.now(timezone.utc).isoformat(),
+                "stopped_at": datetime.now(UTC).isoformat(),
             },
             **kwargs
         )
-    
+
     def create_profitable_bot(self,
                              total_trades: int = 100,
                              win_rate: float = 0.65,
                              avg_profit: float = 50.0,
-                             **kwargs) -> Dict[str, Any]:
+                             **kwargs) -> dict[str, Any]:
         """Create a bot with profitable performance.
         
         Args:
@@ -227,11 +227,11 @@ class BotFactory:
         winning_trades = int(total_trades * win_rate)
         losing_trades = total_trades - winning_trades
         avg_loss = avg_profit * 0.5  # Losses are half the size of wins
-        
+
         total_wins = winning_trades * avg_profit
         total_losses = losing_trades * avg_loss
         total_pnl = total_wins - total_losses
-        
+
         return self.create(
             performance={
                 "total_trades": total_trades,
@@ -247,11 +247,11 @@ class BotFactory:
             },
             **kwargs
         )
-    
+
     def create_batch(self,
                     count: int,
-                    strategies: List[str] = None,
-                    user_id: int = 123) -> List[Dict[str, Any]]:
+                    strategies: list[str] = None,
+                    user_id: int = 123) -> list[dict[str, Any]]:
         """Create multiple bots.
         
         Args:
@@ -264,12 +264,12 @@ class BotFactory:
         """
         if strategies is None:
             strategies = ["grid", "arbitrage", "dca", "market_maker"]
-        
+
         bots = []
-        
+
         for i in range(count):
             strategy = strategies[i % len(strategies)]
-            
+
             if strategy == "grid":
                 bot = self.create_grid_bot(name=f"grid_bot_{i}", user_id=user_id)
             elif strategy == "arbitrage":
@@ -278,7 +278,7 @@ class BotFactory:
                 bot = self.create_dca_bot(name=f"dca_bot_{i}", user_id=user_id)
             else:
                 bot = self.create_market_maker_bot(name=f"mm_bot_{i}", user_id=user_id)
-            
+
             bots.append(bot)
-        
+
         return bots

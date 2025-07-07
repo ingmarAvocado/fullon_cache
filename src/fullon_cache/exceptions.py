@@ -3,7 +3,6 @@
 This module defines all custom exceptions used throughout the cache system.
 """
 
-from typing import Optional
 
 
 class CacheError(Exception):
@@ -33,9 +32,9 @@ class ConnectionError(CacheError):
         port: Redis port that failed
         original_error: The underlying Redis error
     """
-    
-    def __init__(self, message: str, host: Optional[str] = None, 
-                 port: Optional[int] = None, original_error: Optional[Exception] = None):
+
+    def __init__(self, message: str, host: str | None = None,
+                 port: int | None = None, original_error: Exception | None = None):
         super().__init__(message)
         self.host = host
         self.port = port
@@ -52,9 +51,9 @@ class SerializationError(CacheError):
         data_type: Type of data that failed to serialize
         operation: 'serialize' or 'deserialize'
     """
-    
-    def __init__(self, message: str, data_type: Optional[str] = None,
-                 operation: Optional[str] = None):
+
+    def __init__(self, message: str, data_type: str | None = None,
+                 operation: str | None = None):
         super().__init__(message)
         self.data_type = data_type
         self.operation = operation
@@ -69,7 +68,7 @@ class KeyNotFoundError(CacheError):
     Attributes:
         key: The Redis key that was not found
     """
-    
+
     def __init__(self, key: str):
         super().__init__(f"Key not found: {key}")
         self.key = key
@@ -84,8 +83,8 @@ class ConfigurationError(CacheError):
     Attributes:
         config_key: The configuration key that caused the error
     """
-    
-    def __init__(self, message: str, config_key: Optional[str] = None):
+
+    def __init__(self, message: str, config_key: str | None = None):
         super().__init__(message)
         self.config_key = config_key
 
@@ -100,9 +99,9 @@ class StreamError(CacheError):
         stream_key: The stream key that caused the error
         operation: The stream operation that failed
     """
-    
-    def __init__(self, message: str, stream_key: Optional[str] = None,
-                 operation: Optional[str] = None):
+
+    def __init__(self, message: str, stream_key: str | None = None,
+                 operation: str | None = None):
         super().__init__(message)
         self.stream_key = stream_key
         self.operation = operation
@@ -117,8 +116,8 @@ class PubSubError(CacheError):
     Attributes:
         channel: The pub/sub channel that caused the error
     """
-    
-    def __init__(self, message: str, channel: Optional[str] = None):
+
+    def __init__(self, message: str, channel: str | None = None):
         super().__init__(message)
         self.channel = channel
 
@@ -133,9 +132,9 @@ class LockError(CacheError):
         lock_key: The lock key that caused the error
         holder: The current lock holder if known
     """
-    
-    def __init__(self, message: str, lock_key: Optional[str] = None,
-                 holder: Optional[str] = None):
+
+    def __init__(self, message: str, lock_key: str | None = None,
+                 holder: str | None = None):
         super().__init__(message)
         self.lock_key = lock_key
         self.holder = holder

@@ -5,17 +5,19 @@ It handles connection configuration, pooling, health checks, and automatic
 uvloop optimization for maximum performance.
 """
 
-import os
 import asyncio
-import weakref
-from typing import Optional, Dict, Any
 import logging
-from redis.asyncio import Redis, ConnectionPool as RedisConnectionPool
-from redis.asyncio.connection import ConnectionError as RedisConnectionError
-from dotenv import load_dotenv
+import os
+import weakref
+from typing import Any, Optional
 
-from .exceptions import ConnectionError, ConfigurationError
-from .event_loop import configure_event_loop, get_policy_info, EventLoopPolicy
+from dotenv import load_dotenv
+from redis.asyncio import ConnectionPool as RedisConnectionPool
+from redis.asyncio import Redis
+from redis.asyncio.connection import ConnectionError as RedisConnectionError
+
+from .event_loop import EventLoopPolicy, configure_event_loop, get_policy_info
+from .exceptions import ConfigurationError, ConnectionError
 
 # Load environment variables
 load_dotenv()
@@ -57,27 +59,27 @@ class ConnectionPool:
         FULLON_CACHE_EVENT_LOOP: Event loop policy (auto/asyncio/uvloop)
         FULLON_CACHE_AUTO_CONFIGURE: Auto-configure uvloop (default: true)
     """
-    
+
     _instance: Optional['ConnectionPool'] = None
     _pools: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()  # Map event loops to pools
-    _config: Dict[str, Any] = {}
-    
+    _config: dict[str, Any] = {}
+
     def __new__(cls) -> 'ConnectionPool':
         """Ensure only one instance exists (singleton pattern)."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self):
         """Initialize the connection pool with configuration and uvloop optimization."""
         if self._initialized:
             return
-            
+
         self._load_config()
         self._configure_event_loop()
         self._initialized = True
-    
+
     def _load_config(self) -> None:
         """Load configuration from environment variables."""
         self._config = {
@@ -91,30 +93,30 @@ class ConnectionPool:
             'decode_responses': True,  # Always decode for consistency
             'auto_configure_uvloop': os.getenv('FULLON_CACHE_AUTO_CONFIGURE', 'true').lower() == 'true',
         }
-        
+
         # Validate configuration
         if self._config['port'] < 1 or self._config['port'] > 65535:
             raise ConfigurationError(
-                f"Invalid Redis port: {self._config['port']}", 
+                f"Invalid Redis port: {self._config['port']}",
                 config_key='REDIS_PORT'
             )
-            
+
         if self._config['db'] < 0 or self._config['db'] > 15:
             raise ConfigurationError(
-                f"Invalid Redis database number: {self._config['db']}", 
+                f"Invalid Redis database number: {self._config['db']}",
                 config_key='REDIS_DB'
             )
-    
+
     def _configure_event_loop(self) -> None:
         """Configure the optimal event loop policy for performance."""
         if not self._config['auto_configure_uvloop']:
             logger.debug("Auto-configuration of uvloop disabled by configuration")
             return
-            
+
         try:
             # Configure the event loop for optimal performance
             active_policy = configure_event_loop()
-            
+
             if active_policy == EventLoopPolicy.UVLOOP:
                 logger.info("uvloop configured for optimal Redis performance")
                 # Increase max connections for uvloop due to better performance
@@ -126,11 +128,11 @@ class ConnectionPool:
                 )
             else:
                 logger.info(f"Using {active_policy.value} event loop for Redis operations")
-                
+
         except Exception as e:
             logger.warning(f"Failed to configure optimal event loop: {e}")
             # Continue with default asyncio
-    
+
     def get_pool(self) -> RedisConnectionPool:
         """Get or create the Redis connection pool for the current event loop.
         
@@ -145,7 +147,7 @@ class ConnectionPool:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             raise RuntimeError("ConnectionPool.get_pool() must be called from an async context")
-        
+
         # Check if we have a pool for this event loop
         if loop not in self._pools:
             pool_kwargs = {
@@ -157,21 +159,21 @@ class ConnectionPool:
                 'socket_connect_timeout': self._config['socket_connect_timeout'],
                 'decode_responses': self._config['decode_responses'],
             }
-            
+
             if self._config['password']:
                 pool_kwargs['password'] = self._config['password']
-                
+
             pool = RedisConnectionPool(**pool_kwargs)
             self._pools[loop] = pool
-            
+
             logger.debug(
                 f"Created Redis connection pool for event loop {id(loop)}: "
                 f"{self._config['host']}:{self._config['port']}/{self._config['db']} "
                 f"(max_connections={self._config['max_connections']})"
             )
-            
+
         return self._pools[loop]
-    
+
     async def get_connection(self, decode_responses: bool = True) -> Redis:
         """Get a Redis connection from the pool.
         
@@ -186,7 +188,7 @@ class ConnectionPool:
         """
         try:
             pool = self.get_pool()
-            
+
             # Create a new Redis instance with custom decode setting if needed
             if decode_responses != self._config['decode_responses']:
                 # Need a separate connection with different decode setting
@@ -202,11 +204,11 @@ class ConnectionPool:
             else:
                 # Use the shared pool
                 redis = Redis(connection_pool=pool)
-                
+
             # Test the connection
             await redis.ping()
             return redis
-            
+
         except RedisConnectionError as e:
             raise ConnectionError(
                 f"Failed to connect to Redis at {self._config['host']}:{self._config['port']}",
@@ -221,7 +223,7 @@ class ConnectionPool:
                 port=self._config['port'],
                 original_error=e
             )
-    
+
     async def close(self) -> None:
         """Close all connection pools for all event loops.
         
@@ -232,7 +234,7 @@ class ConnectionPool:
         except RuntimeError:
             # No running loop, can't close async resources
             return
-            
+
         # Close pool for current event loop
         if loop in self._pools:
             pool = self._pools[loop]
@@ -244,16 +246,16 @@ class ConnectionPool:
             finally:
                 # Remove from dict
                 self._pools.pop(loop, None)
-    
-    def get_config(self) -> Dict[str, Any]:
+
+    def get_config(self) -> dict[str, Any]:
         """Get the current configuration.
         
         Returns:
             Dict containing the current Redis configuration
         """
         return self._config.copy()
-    
-    def get_performance_info(self) -> Dict[str, Any]:
+
+    def get_performance_info(self) -> dict[str, Any]:
         """Get detailed performance information about the connection pool.
         
         Returns:
@@ -264,7 +266,7 @@ class ConnectionPool:
             'event_loop_info': get_policy_info(),
             'pool_stats': {},
         }
-        
+
         # Add pool statistics for current event loop if available
         try:
             loop = asyncio.get_running_loop()
@@ -279,9 +281,9 @@ class ConnectionPool:
         except (RuntimeError, AttributeError):
             # Not in async context or pool doesn't have stats
             pass
-        
+
         return info
-    
+
     @classmethod
     def reset(cls) -> None:
         """Reset the singleton instance.
@@ -294,7 +296,7 @@ class ConnectionPool:
             # Clear all pools (they will be cleaned up by GC/weakref)
             cls._instance._pools.clear()
             cls._instance = None
-    
+
     @classmethod
     async def reset_async(cls) -> None:
         """Reset the singleton instance with proper async cleanup.

@@ -10,16 +10,12 @@ Example:
     asyncio.run(basic_usage.main())
 """
 
-from . import basic_usage
-from . import pubsub_example
-from . import queue_patterns
-from . import bot_coordination
-from . import performance_test
+from . import basic_usage, bot_coordination, performance_test, pubsub_example, queue_patterns
 
 __all__ = [
     'basic_usage',
     'pubsub_example',
-    'queue_patterns', 
+    'queue_patterns',
     'bot_coordination',
     'performance_test',
     'get_all_examples',

@@ -681,7 +681,7 @@ def get_all_references() -> dict:
 # Make individual references easily accessible
 __all__ = [
     'BASE_CACHE',
-    'PROCESS_CACHE', 
+    'PROCESS_CACHE',
     'EXCHANGE_CACHE',
     'SYMBOL_CACHE',
     'TICK_CACHE',

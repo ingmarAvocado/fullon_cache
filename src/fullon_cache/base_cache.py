@@ -4,21 +4,22 @@ This module provides the foundation for all cache operations including
 connection management, key operations, and common utilities.
 """
 
-import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Union, AsyncIterator
-from datetime import timedelta
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from typing import Any
 
 import redis.asyncio as redis
-from redis.exceptions import RedisError, ResponseError
+from redis.exceptions import RedisError
 
 from .connection import ConnectionPool, get_redis
 from .exceptions import (
-    CacheError, ConnectionError, SerializationError,
-    KeyNotFoundError, PubSubError
+    CacheError,
+    ConnectionError,
+    PubSubError,
+    SerializationError,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ class BaseCache:
         async for message in cache.subscribe("channel"):
             print(message)
     """
-    
+
     def __init__(self, key_prefix: str = "", decode_responses: bool = True):
         """Initialize the base cache.
         
@@ -66,9 +67,9 @@ class BaseCache:
         self.key_prefix = key_prefix
         self.decode_responses = decode_responses
         self._pool = ConnectionPool()
-        self._pubsub_clients: Dict[str, redis.client.PubSub] = {}
+        self._pubsub_clients: dict[str, redis.client.PubSub] = {}
         self._closed = False
-    
+
     async def close(self) -> None:
         """Close all connections and cleanup resources.
         
@@ -76,7 +77,7 @@ class BaseCache:
         """
         if self._closed:
             return
-            
+
         # Close all pubsub clients
         for client in self._pubsub_clients.values():
             try:
@@ -84,10 +85,10 @@ class BaseCache:
             except Exception:
                 pass
         self._pubsub_clients.clear()
-        
+
         # Mark as closed
         self._closed = True
-    
+
     def _make_key(self, key: str) -> str:
         """Add prefix to key if configured.
         
@@ -100,7 +101,7 @@ class BaseCache:
         if self.key_prefix:
             return f"{self.key_prefix}:{key}"
         return key
-    
+
     async def _get_redis(self) -> redis.Redis:
         """Get a Redis connection from the pool.
         
@@ -113,19 +114,19 @@ class BaseCache:
         if self._closed:
             raise ConnectionError("Cache is closed")
         return await self._pool.get_connection(decode_responses=self.decode_responses)
-    
+
     class _RedisContext:
         """Context manager for Redis operations."""
-        
+
         def __init__(self, cache):
             self.cache = cache
             self.redis_client = None
-            
+
         async def __aenter__(self):
             """Enter the context - get Redis connection."""
             self.redis_client = await self.cache._get_redis()
             return self.redis_client
-            
+
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             """Exit the context - close Redis connection."""
             if self.redis_client:
@@ -134,7 +135,7 @@ class BaseCache:
                 except Exception:
                     pass  # Ignore errors during cleanup
             return False
-    
+
     def _redis_context(self):
         """Get a Redis context manager.
         
@@ -146,10 +147,10 @@ class BaseCache:
                 await r.set("key", "value")
         """
         return self._RedisContext(self)
-    
+
     # Basic Operations
-    
-    async def get(self, key: str) -> Optional[str]:
+
+    async def get(self, key: str) -> str | None:
         """Get a value from cache.
         
         Args:
@@ -167,9 +168,9 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to get key {key}: {e}")
             raise CacheError(f"Failed to get key: {str(e)}")
-    
-    async def set(self, key: str, value: Union[str, bytes], 
-                  ttl: Optional[int] = None) -> bool:
+
+    async def set(self, key: str, value: str | bytes,
+                  ttl: int | None = None) -> bool:
         """Set a value in cache.
         
         Args:
@@ -192,7 +193,7 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to set key {key}: {e}")
             raise CacheError(f"Failed to set key: {str(e)}")
-    
+
     async def delete(self, *keys: str) -> int:
         """Delete one or more keys.
         
@@ -207,7 +208,7 @@ class BaseCache:
         """
         if not keys:
             return 0
-            
+
         try:
             async with self._redis_context() as r:
                 full_keys = [self._make_key(k) for k in keys]
@@ -215,7 +216,7 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to delete keys: {e}")
             raise CacheError(f"Failed to delete keys: {str(e)}")
-    
+
     async def exists(self, *keys: str) -> int:
         """Check if keys exist.
         
@@ -230,7 +231,7 @@ class BaseCache:
         """
         if not keys:
             return 0
-            
+
         try:
             async with self._redis_context() as r:
                 full_keys = [self._make_key(k) for k in keys]
@@ -238,7 +239,7 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to check key existence: {e}")
             raise CacheError(f"Failed to check key existence: {str(e)}")
-    
+
     async def expire(self, key: str, ttl: int) -> bool:
         """Set expiration on a key.
         
@@ -258,10 +259,10 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to set expiration on key {key}: {e}")
             raise CacheError(f"Failed to set expiration: {str(e)}")
-    
+
     # JSON Operations
-    
-    async def get_json(self, key: str) -> Optional[Any]:
+
+    async def get_json(self, key: str) -> Any | None:
         """Get and deserialize JSON data.
         
         Args:
@@ -277,18 +278,18 @@ class BaseCache:
         value = await self.get(key)
         if value is None:
             return None
-            
+
         try:
             return json.loads(value)
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
             raise SerializationError(
                 f"Failed to decode JSON for key {key}",
                 data_type="json",
                 operation="deserialize"
             )
-    
-    async def set_json(self, key: str, value: Any, 
-                       ttl: Optional[int] = None) -> bool:
+
+    async def set_json(self, key: str, value: Any,
+                       ttl: int | None = None) -> bool:
         """Serialize and set JSON data.
         
         Args:
@@ -310,19 +311,19 @@ class BaseCache:
                     return obj.isoformat()
                 # Raise TypeError for other non-serializable objects
                 raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
-            
+
             json_str = json.dumps(value, default=json_default)
             return await self.set(key, json_str, ttl)
-        except (TypeError, ValueError) as e:
+        except (TypeError, ValueError):
             raise SerializationError(
                 f"Failed to encode JSON for key {key}",
                 data_type=str(type(value)),
                 operation="serialize"
             )
-    
+
     # Hash Operations
-    
-    async def hget(self, key: str, field: str) -> Optional[str]:
+
+    async def hget(self, key: str, field: str) -> str | None:
         """Get a field from a hash.
         
         Args:
@@ -341,9 +342,9 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to get hash field {key}:{field}: {e}")
             raise CacheError(f"Failed to get hash field: {str(e)}")
-    
-    async def hset(self, key: str, field: Optional[str] = None, value: Optional[str] = None, 
-                   mapping: Optional[Dict[str, Any]] = None) -> int:
+
+    async def hset(self, key: str, field: str | None = None, value: str | None = None,
+                   mapping: dict[str, Any] | None = None) -> int:
         """Set field(s) in a hash.
         
         Args:
@@ -367,8 +368,8 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to set hash field(s) for {key}: {e}")
             raise CacheError(f"Failed to set hash field: {str(e)}")
-    
-    async def hgetall(self, key: str) -> Dict[str, str]:
+
+    async def hgetall(self, key: str) -> dict[str, str]:
         """Get all fields from a hash.
         
         Args:
@@ -386,7 +387,7 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to get hash {key}: {e}")
             raise CacheError(f"Failed to get hash: {str(e)}")
-    
+
     async def hdel(self, key: str, *fields: str) -> int:
         """Delete fields from a hash.
         
@@ -402,16 +403,16 @@ class BaseCache:
         """
         if not fields:
             return 0
-            
+
         try:
             async with self._redis_context() as r:
                 return await r.hdel(self._make_key(key), *fields)
         except RedisError as e:
             logger.error(f"Failed to delete hash fields: {e}")
             raise CacheError(f"Failed to delete hash fields: {str(e)}")
-    
+
     # List Operations
-    
+
     async def lpush(self, key: str, *values: str) -> int:
         """Push values to the left of a list.
         
@@ -427,14 +428,14 @@ class BaseCache:
         """
         if not values:
             return 0
-            
+
         try:
             async with self._redis_context() as r:
                 return await r.lpush(self._make_key(key), *values)
         except RedisError as e:
             logger.error(f"Failed to push to list {key}: {e}")
             raise CacheError(f"Failed to push to list: {str(e)}")
-    
+
     async def rpush(self, key: str, *values: str) -> int:
         """Push values to the right of a list.
         
@@ -450,15 +451,15 @@ class BaseCache:
         """
         if not values:
             return 0
-            
+
         try:
             async with self._redis_context() as r:
                 return await r.rpush(self._make_key(key), *values)
         except RedisError as e:
             logger.error(f"Failed to push to list {key}: {e}")
             raise CacheError(f"Failed to push to list: {str(e)}")
-    
-    async def lpop(self, key: str) -> Optional[str]:
+
+    async def lpop(self, key: str) -> str | None:
         """Pop value from the left of a list.
         
         Args:
@@ -476,8 +477,8 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to pop from list {key}: {e}")
             raise CacheError(f"Failed to pop from list: {str(e)}")
-    
-    async def blpop(self, keys: List[str], timeout: int = 0) -> Optional[tuple]:
+
+    async def blpop(self, keys: list[str], timeout: int = 0) -> tuple | None:
         """Blocking pop from the left of lists.
         
         Args:
@@ -504,9 +505,9 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to blocking pop: {e}")
             raise CacheError(f"Failed to blocking pop: {str(e)}")
-    
+
     # Pattern Operations
-    
+
     async def scan_keys(self, pattern: str = "*", count: int = 100) -> AsyncIterator[str]:
         """Scan for keys matching a pattern.
         
@@ -524,24 +525,24 @@ class BaseCache:
             async with self._redis_context() as r:
                 full_pattern = self._make_key(pattern)
                 cursor = 0
-                
+
                 while True:
                     cursor, keys = await r.scan(cursor, match=full_pattern, count=count)
-                    
+
                     for key in keys:
                         # Remove prefix from returned keys
                         if self.key_prefix and key.startswith(self.key_prefix + ":"):
                             yield key[len(self.key_prefix) + 1:]
                         else:
                             yield key
-                    
+
                     if cursor == 0:
                         break
-                        
+
         except RedisError as e:
             logger.error(f"Failed to scan keys: {e}")
             raise CacheError(f"Failed to scan keys: {str(e)}")
-    
+
     async def delete_pattern(self, pattern: str) -> int:
         """Delete all keys matching a pattern.
         
@@ -556,23 +557,23 @@ class BaseCache:
         """
         deleted = 0
         keys_to_delete = []
-        
+
         async for key in self.scan_keys(pattern):
             keys_to_delete.append(key)
-            
+
             # Delete in batches of 1000
             if len(keys_to_delete) >= 1000:
                 deleted += await self.delete(*keys_to_delete)
                 keys_to_delete = []
-        
+
         # Delete remaining keys
         if keys_to_delete:
             deleted += await self.delete(*keys_to_delete)
-            
+
         return deleted
-    
+
     # Pub/Sub Operations
-    
+
     async def publish(self, channel: str, message: str) -> int:
         """Publish a message to a channel.
         
@@ -592,7 +593,7 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to publish to channel {channel}: {e}")
             raise PubSubError(f"Failed to publish: {str(e)}", channel=channel)
-    
+
     async def subscribe(self, *channels: str) -> AsyncIterator[dict]:
         """Subscribe to channels and yield messages.
         
@@ -608,19 +609,19 @@ class BaseCache:
         if not channels:
             # Return empty async generator for no channels
             return
-            
+
         redis_client = None
         pubsub = None
-        
+
         try:
             redis_client = await get_redis(decode_responses=True)
             pubsub = redis_client.pubsub()
             await pubsub.subscribe(*channels)
-            
+
             async for message in pubsub.listen():
                 if message['type'] == 'message':
                     yield message
-                    
+
         except RedisError as e:
             logger.error(f"Subscription error: {e}")
             raise PubSubError(f"Subscription failed: {str(e)}", channel=str(channels))
@@ -630,9 +631,9 @@ class BaseCache:
                 await pubsub.aclose()
             if redis_client:
                 await redis_client.aclose()
-    
+
     # Utility Operations
-    
+
     async def ping(self) -> bool:
         """Test Redis connection.
         
@@ -647,7 +648,7 @@ class BaseCache:
                 return await r.ping()
         except RedisError as e:
             raise ConnectionError(f"Redis ping failed: {str(e)}")
-    
+
     async def scan_iter(self, pattern: str = "*", count: int = 100) -> AsyncIterator[str]:
         """Scan keys matching pattern.
         
@@ -660,12 +661,12 @@ class BaseCache:
         """
         # Add prefix to pattern
         full_pattern = self._make_key(pattern)
-        
+
         async with self._redis_context() as r:
             async for key in r.scan_iter(match=full_pattern, count=count):
                 yield key
-    
-    async def xadd(self, stream: str, fields: Dict[str, Any], maxlen: Optional[int] = None,
+
+    async def xadd(self, stream: str, fields: dict[str, Any], maxlen: int | None = None,
                    approximate: bool = True) -> str:
         """Add entry to Redis stream.
         
@@ -689,9 +690,9 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to add to stream {stream}: {e}")
             raise CacheError(f"Failed to add to stream: {str(e)}")
-    
-    async def xread(self, streams: Dict[str, str], count: Optional[int] = None,
-                    block: Optional[int] = None) -> List:
+
+    async def xread(self, streams: dict[str, str], count: int | None = None,
+                    block: int | None = None) -> list:
         """Read from Redis streams.
         
         Args:
@@ -706,14 +707,14 @@ class BaseCache:
             async with self._redis_context() as r:
                 # Add prefix to stream keys
                 prefixed_streams = {
-                    self._make_key(stream): id_ 
+                    self._make_key(stream): id_
                     for stream, id_ in streams.items()
                 }
                 return await r.xread(prefixed_streams, count=count, block=block)
         except RedisError as e:
             logger.error(f"Failed to read from streams: {e}")
             raise CacheError(f"Failed to read from streams: {str(e)}")
-    
+
     async def xdel(self, stream: str, *ids: str) -> int:
         """Delete entries from stream.
         
@@ -730,7 +731,7 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to delete from stream {stream}: {e}")
             raise CacheError(f"Failed to delete from stream: {str(e)}")
-    
+
     async def xlen(self, stream: str) -> int:
         """Get stream length.
         
@@ -746,7 +747,7 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to get stream length {stream}: {e}")
             raise CacheError(f"Failed to get stream length: {str(e)}")
-    
+
     async def xtrim(self, stream: str, maxlen: int, approximate: bool = True) -> int:
         """Trim stream to maxlen.
         
@@ -764,10 +765,10 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to trim stream {stream}: {e}")
             raise CacheError(f"Failed to trim stream: {str(e)}")
-    
+
     # Timestamp utilities for consistent datetime handling
-    
-    def _to_redis_timestamp(self, dt: Optional[datetime]) -> Optional[str]:
+
+    def _to_redis_timestamp(self, dt: datetime | None) -> str | None:
         """Convert datetime to ISO format string for Redis storage.
         
         This ensures all timestamps are stored consistently as ISO format
@@ -786,19 +787,19 @@ class BaseCache:
         """
         if dt is None:
             return None
-        
+
         # Ensure datetime is timezone-aware
         if dt.tzinfo is None:
             # Assume UTC if no timezone
-            dt = dt.replace(tzinfo=timezone.utc)
-        
+            dt = dt.replace(tzinfo=UTC)
+
         # Convert to UTC if different timezone
-        if dt.tzinfo != timezone.utc:
-            dt = dt.astimezone(timezone.utc)
-        
+        if dt.tzinfo != UTC:
+            dt = dt.astimezone(UTC)
+
         return dt.isoformat()
-    
-    def _from_redis_timestamp(self, value: Optional[str]) -> Optional[datetime]:
+
+    def _from_redis_timestamp(self, value: str | None) -> datetime | None:
         """Parse ISO format string from Redis to datetime object.
         
         This ensures all timestamps retrieved from Redis are proper
@@ -816,21 +817,21 @@ class BaseCache:
         """
         if value is None or value == '':
             return None
-        
+
         try:
             # Try parsing ISO format
             dt = datetime.fromisoformat(value)
-            
+
             # Ensure timezone-aware
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            
+                dt = dt.replace(tzinfo=UTC)
+
             return dt
         except (ValueError, AttributeError) as e:
             # Log warning but don't fail
             logger.warning(f"Failed to parse timestamp '{value}': {e}")
             return None
-    
+
     async def ltrim(self, key: str, start: int, stop: int) -> bool:
         """Trim list to specified range.
         
@@ -848,8 +849,8 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to trim list {key}: {e}")
             raise CacheError(f"Failed to trim list: {str(e)}")
-    
-    async def lrange(self, key: str, start: int, stop: int) -> List[str]:
+
+    async def lrange(self, key: str, start: int, stop: int) -> list[str]:
         """Get range of elements from list.
         
         Args:
@@ -866,7 +867,7 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to get list range {key}: {e}")
             raise CacheError(f"Failed to get list range: {str(e)}")
-    
+
     async def llen(self, key: str) -> int:
         """Get list length.
         
@@ -882,7 +883,7 @@ class BaseCache:
         except RedisError as e:
             logger.error(f"Failed to get list length {key}: {e}")
             raise CacheError(f"Failed to get list length: {str(e)}")
-    
+
     async def info(self) -> dict:
         """Get Redis server information.
         
@@ -897,7 +898,7 @@ class BaseCache:
                 return await r.info()
         except RedisError as e:
             raise CacheError(f"Failed to get server info: {str(e)}")
-    
+
     async def flushdb(self) -> bool:
         """Flush the current database.
         
@@ -914,7 +915,7 @@ class BaseCache:
                 return await r.flushdb()
         except RedisError as e:
             raise CacheError(f"Failed to flush database: {str(e)}")
-    
+
     async def scard(self, key: str) -> int:
         """Get the cardinality (number of members) of a set.
         
@@ -932,9 +933,9 @@ class BaseCache:
                 return await r.scard(self._make_key(key))
         except RedisError as e:
             raise CacheError(f"Failed to get set cardinality: {str(e)}")
-    
+
     # Pipeline Operations
-    
+
     @asynccontextmanager
     async def pipeline(self, transaction: bool = True):
         """Create a pipeline for batch operations.

@@ -4,14 +4,12 @@ This module provides a simple cache for WebSocket error queuing,
 inheriting from ProcessCache as per the architecture.
 """
 
-import json
 import logging
-from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from .process_cache import ProcessCache
-from .exceptions import CacheError
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +21,13 @@ class Exchange:
     name: str
     ex_id: str
     cat_ex_id: str
-    limits: Dict[str, Any]
+    limits: dict[str, Any]
     active: bool = True
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
-@dataclass  
+@dataclass
 class ExchangeAccount:
     """Exchange account data model."""
     id: int
@@ -39,8 +37,8 @@ class ExchangeAccount:
     api_key: str
     test_mode: bool = False
     active: bool = True
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class ExchangeCache(ProcessCache):
@@ -62,12 +60,12 @@ class ExchangeCache(ProcessCache):
         if error:
             print(f"WebSocket error: {error}")
     """
-    
+
     def __init__(self):
         """Initialize the exchange cache."""
         super().__init__()
         self._key_prefix = "exchange"
-    
+
     async def push_ws_error(self, error: str, ex_id: str) -> None:
         """Push WebSocket error to queue.
         
@@ -80,8 +78,8 @@ class ExchangeCache(ProcessCache):
         """
         redis_key = f"ws_error:{ex_id}"
         await self._cache.rpush(redis_key, error)
-    
-    async def pop_ws_error(self, ex_id: str, timeout: int = 0) -> Optional[str]:
+
+    async def pop_ws_error(self, ex_id: str, timeout: int = 0) -> str | None:
         """Pop WebSocket error from queue (blocking).
         
         Args:
@@ -99,7 +97,7 @@ class ExchangeCache(ProcessCache):
             error = await cache.pop_ws_error("binance_1", timeout=5)
         """
         redis_key = f"ws_error:{ex_id}"
-        
+
         try:
             result = await self._cache.blpop([redis_key], timeout=timeout)
             if result:
@@ -107,5 +105,5 @@ class ExchangeCache(ProcessCache):
                 return result[1]
         except Exception as e:
             logger.error(f"Failed to pop WebSocket error: {e}")
-        
+
         return None

@@ -1,16 +1,16 @@
 """Account and Position factories for test data generation."""
 
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 class PositionFactory:
     """Factory for creating test position data."""
-    
+
     def __init__(self):
         self._counter = 0
-    
-    def create(self, **kwargs) -> Dict[str, Any]:
+
+    def create(self, **kwargs) -> dict[str, Any]:
         """Create position data with defaults.
         
         Args:
@@ -20,7 +20,7 @@ class PositionFactory:
             Dictionary with position data
         """
         self._counter += 1
-        
+
         defaults = {
             "symbol": "BTC/USDT",
             "amount": 1.0,
@@ -36,24 +36,24 @@ class PositionFactory:
             "maintenance_margin": 0.0,
             "initial_margin": 0.0,
             "liquidation_price": None,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
-        
+
         # Merge with provided kwargs
         result = defaults.copy()
         result.update(kwargs)
-        
+
         # Calculate derived fields if not provided
         if result["cost"] == 0 and result["amount"] != 0 and result["price"] != 0:
             result["cost"] = result["amount"] * result["price"]
-        
+
         return result
-    
-    def create_profitable_position(self, 
+
+    def create_profitable_position(self,
                                   symbol: str = "BTC/USDT",
                                   profit_percent: float = 10.0,
-                                  **kwargs) -> Dict[str, Any]:
+                                  **kwargs) -> dict[str, Any]:
         """Create a profitable position.
         
         Args:
@@ -67,7 +67,7 @@ class PositionFactory:
         entry_price = 50000.0
         current_price = entry_price * (1 + profit_percent / 100)
         amount = kwargs.pop("amount", 1.0)
-        
+
         return self.create(
             symbol=symbol,
             amount=amount,
@@ -78,11 +78,11 @@ class PositionFactory:
             unrealized_pl=(current_price - entry_price) * amount,
             **kwargs
         )
-    
+
     def create_losing_position(self,
-                              symbol: str = "BTC/USDT", 
+                              symbol: str = "BTC/USDT",
                               loss_percent: float = 5.0,
-                              **kwargs) -> Dict[str, Any]:
+                              **kwargs) -> dict[str, Any]:
         """Create a losing position.
         
         Args:
@@ -96,7 +96,7 @@ class PositionFactory:
         entry_price = 50000.0
         current_price = entry_price * (1 - loss_percent / 100)
         amount = kwargs.pop("amount", 1.0)
-        
+
         return self.create(
             symbol=symbol,
             amount=amount,
@@ -107,10 +107,10 @@ class PositionFactory:
             unrealized_pl=(current_price - entry_price) * amount,
             **kwargs
         )
-    
+
     def create_leveraged_position(self,
                                  leverage: float = 10.0,
-                                 **kwargs) -> Dict[str, Any]:
+                                 **kwargs) -> dict[str, Any]:
         """Create a leveraged position.
         
         Args:
@@ -124,10 +124,10 @@ class PositionFactory:
         price = 50000.0
         notional = amount * price
         margin = notional / leverage
-        
+
         # Calculate liquidation price (simplified)
         liquidation_price = price * (1 - 0.8 / leverage)
-        
+
         return self.create(
             amount=amount,
             price=price,
@@ -144,12 +144,12 @@ class PositionFactory:
 
 class AccountFactory:
     """Factory for creating test account data."""
-    
+
     def __init__(self):
         self._counter = 0
         self.position_factory = PositionFactory()
-    
-    def create(self, **kwargs) -> Dict[str, Any]:
+
+    def create(self, **kwargs) -> dict[str, Any]:
         """Create account data with defaults.
         
         Args:
@@ -167,7 +167,7 @@ class AccountFactory:
             )
         """
         self._counter += 1
-        
+
         defaults = {
             "account_id": f"ACC{self._counter:06d}",
             "user_id": 123,
@@ -191,14 +191,14 @@ class AccountFactory:
             "used_margin": 0.0,
             "equity": None,
             "pnl": 0.0,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
-        
+
         # Merge with provided kwargs
         result = defaults.copy()
         result.update(kwargs)
-        
+
         # Calculate total value if not provided
         if result["total_value"] is None:
             total = 0.0
@@ -206,20 +206,20 @@ class AccountFactory:
                 if isinstance(balance_data, dict):
                     total += balance_data.get("total", 0) * self._get_usd_price(balance_data)
             result["total_value"] = total
-        
+
         # Set equity to total_value if not provided
         if result["equity"] is None:
             result["equity"] = result["total_value"]
-        
+
         # Set free margin
         if result["free_margin"] is None:
             result["free_margin"] = result["equity"] - result["used_margin"]
-        
+
         return result
-    
+
     def create_with_positions(self,
-                             positions: List[Dict[str, Any]] = None,
-                             **kwargs) -> Dict[str, Any]:
+                             positions: list[dict[str, Any]] = None,
+                             **kwargs) -> dict[str, Any]:
         """Create account with positions.
         
         Args:
@@ -243,27 +243,27 @@ class AccountFactory:
                     loss_percent=2.0
                 )
             ]
-        
+
         # Convert positions list to dict keyed by symbol
         positions_dict = {pos["symbol"]: pos for pos in positions}
-        
+
         # Calculate total PnL
         total_pnl = sum(pos.get("pl", 0) for pos in positions)
-        
+
         # Calculate used margin
         used_margin = sum(pos.get("margin", 0) for pos in positions)
-        
+
         return self.create(
             positions=positions_dict,
             pnl=total_pnl,
             used_margin=used_margin,
             **kwargs
         )
-    
+
     def create_margin_account(self,
                              leverage: float = 5.0,
                              margin_level: float = 150.0,
-                             **kwargs) -> Dict[str, Any]:
+                             **kwargs) -> dict[str, Any]:
         """Create a margin trading account.
         
         Args:
@@ -277,7 +277,7 @@ class AccountFactory:
         equity = 50000.0
         used_margin = equity / leverage
         free_margin = equity - used_margin
-        
+
         # Create leveraged positions
         positions = [
             self.position_factory.create_leveraged_position(
@@ -292,7 +292,7 @@ class AccountFactory:
                 price=3000.0
             )
         ]
-        
+
         return self.create_with_positions(
             positions=positions,
             equity=equity,
@@ -302,8 +302,8 @@ class AccountFactory:
             account_type="margin",
             **kwargs
         )
-    
-    def create_empty_account(self, **kwargs) -> Dict[str, Any]:
+
+    def create_empty_account(self, **kwargs) -> dict[str, Any]:
         """Create an empty account with zero balances.
         
         Args:
@@ -320,10 +320,10 @@ class AccountFactory:
             pnl=0.0,
             **kwargs
         )
-    
+
     def create_multi_currency_account(self,
-                                     currencies: List[str] = None,
-                                     **kwargs) -> Dict[str, Any]:
+                                     currencies: list[str] = None,
+                                     **kwargs) -> dict[str, Any]:
         """Create account with multiple currency balances.
         
         Args:
@@ -335,7 +335,7 @@ class AccountFactory:
         """
         if currencies is None:
             currencies = ["USDT", "BTC", "ETH", "BNB", "SOL"]
-        
+
         balances = {}
         for i, currency in enumerate(currencies):
             amount = 1000.0 / (i + 1)  # Decreasing amounts
@@ -344,12 +344,12 @@ class AccountFactory:
                 "used": amount * 0.2,
                 "total": amount
             }
-        
+
         return self.create(
             balances=balances,
             **kwargs
         )
-    
+
     def _get_usd_price(self, currency_data: Any) -> float:
         """Get USD price for currency (simplified).
         

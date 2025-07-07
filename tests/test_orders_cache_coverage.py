@@ -1,13 +1,10 @@
 """Additional tests to achieve 100% coverage for OrdersCache."""
 
-import asyncio
-import json
-import pytest
-from unittest.mock import patch, AsyncMock
-from redis.exceptions import RedisError
+from unittest.mock import AsyncMock, patch
 
-from fullon_cache import OrdersCache
+import pytest
 from fullon_orm.models import Order
+from redis.exceptions import RedisError
 
 
 class TestOrdersCacheCoverage:
@@ -18,7 +15,7 @@ class TestOrdersCacheCoverage:
         """Test push_open_order with Redis error."""
         mock_redis = AsyncMock()
         mock_redis.rpush.side_effect = RedisError("Push failed")
-        
+
         with patch.object(orders_cache._cache, '_redis_context') as mock_context:
             mock_context.return_value.__aenter__.return_value = mock_redis
             # Should not raise, just log error
@@ -29,7 +26,7 @@ class TestOrdersCacheCoverage:
         """Test pop_open_order with general error."""
         mock_redis = AsyncMock()
         mock_redis.blpop.side_effect = Exception("Some error")
-        
+
         with patch.object(orders_cache._cache, '_redis_context') as mock_context:
             mock_context.return_value.__aenter__.return_value = mock_redis
             # Should log error and return None
@@ -43,7 +40,7 @@ class TestOrdersCacheCoverage:
             "status": "cancelled",
             "symbol": "BTC/USDT"
         }
-        
+
         # Should set expiry without error
         await orders_cache.save_order_data("binance", "order123", order_data)
 
@@ -63,7 +60,7 @@ class TestOrdersCacheCoverage:
             b"order1": b"invalid json{",
             b"order2": b'{"order_id": "order2", "symbol": "ETH/USDT"}'
         }
-        
+
         with patch.object(orders_cache._cache, '_redis_context') as mock_context:
             mock_context.return_value.__aenter__.return_value = mock_redis
             orders = await orders_cache.get_orders("binance")
@@ -96,7 +93,7 @@ class TestOrdersCacheCoverage:
             order_type="limit",
             side="buy"
         )
-        
+
         result = orders_cache._order_to_dict(order)
         assert isinstance(result, dict)
         assert result.get("symbol") == "BTC/USDT"

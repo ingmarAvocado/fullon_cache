@@ -6,12 +6,10 @@ for processing trading orders.
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
+from datetime import UTC, datetime
+from typing import Any
 
 from fullon_orm.models import Order
-from fullon_orm import get_async_session
-from fullon_orm.repositories import OrderRepository
 
 from .base_cache import BaseCache
 
@@ -51,11 +49,11 @@ class OrdersCache:
         # Get order status
         order = await cache.get_order_status("binance", "12345")
     """
-    
+
     def __init__(self):
         """Initialize the orders cache."""
         self._cache = BaseCache()
-        
+
     async def push_open_order(self, oid: str, local_oid: str) -> None:
         """Push order ID to a Redis list.
         
@@ -72,8 +70,8 @@ class OrdersCache:
                 await redis_client.rpush(redis_key, oid)
         except Exception as e:
             logger.error(f"Failed to push open order: {e}")
-    
-    async def pop_open_order(self, oid: str) -> Optional[str]:
+
+    async def pop_open_order(self, oid: str) -> str | None:
         """Pop order from Redis list with blocking.
         
         Args:
@@ -98,12 +96,12 @@ class OrdersCache:
                 raise TimeoutError("Not getting any trade")
             logger.error(f"Failed to pop open order: {e}")
             return None
-    
+
     async def save_order_data(
         self,
         ex_id: str,
         oid: str,
-        data: Dict = {}
+        data: dict = {}
     ) -> None:
         """Save order data to Redis hash.
         
@@ -120,7 +118,7 @@ class OrdersCache:
         """
         redis_key = f"order_status:{ex_id}"
         second_key = str(oid)
-        
+
         try:
             async with self._cache._redis_context() as redis_client:
                 # Get existing data
@@ -129,27 +127,27 @@ class OrdersCache:
                     existing_data = json.loads(existing_data)
                     existing_data.update(data)
                     data = existing_data
-                
+
                 # Update timestamp
-                data['timestamp'] = self._cache._to_redis_timestamp(datetime.now(timezone.utc))
+                data['timestamp'] = self._cache._to_redis_timestamp(datetime.now(UTC))
                 data['order_id'] = oid
-                
+
                 # Save to hash
                 await redis_client.hset(redis_key, second_key, json.dumps(data))
-                
+
                 # Set expiration for cancelled orders
                 if data.get('status') == "canceled":
                     await redis_client.expire(redis_key, 60 * 60)  # 1 hour
-                    
+
         except Exception as e:
             logger.exception(f"Error saving order data to Redis: {e}")
             raise Exception("Error saving order status to Redis") from e
-    
+
     async def get_order_status(
         self,
         ex_id: str,
         oid: str
-    ) -> Optional[Order]:
+    ) -> Order | None:
         """Get order status from Redis hash.
         
         Args:
@@ -164,7 +162,7 @@ class OrdersCache:
         """
         redis_key = f"order_status:{ex_id}"
         second_key = str(oid)
-        
+
         try:
             async with self._cache._redis_context() as redis_client:
                 result = await redis_client.hget(redis_key, second_key)
@@ -178,8 +176,8 @@ class OrdersCache:
         except Exception as e:
             logger.error(f"Failed to get order status: {e}")
         return None
-    
-    async def get_orders(self, ex_id: str) -> List[Order]:
+
+    async def get_orders(self, ex_id: str) -> list[Order]:
         """Get all orders for an exchange.
         
         Args:
@@ -193,7 +191,7 @@ class OrdersCache:
         """
         redis_key = f"order_status:{ex_id}"
         orders = []
-        
+
         try:
             async with self._cache._redis_context() as redis_client:
                 _orders = await redis_client.hgetall(redis_key)
@@ -213,10 +211,10 @@ class OrdersCache:
             pass
         except Exception as e:
             logger.error(f"Failed to get orders: {e}")
-            
+
         return orders
-    
-    async def get_full_accounts(self, ex_id: str) -> Optional[Any]:
+
+    async def get_full_accounts(self, ex_id: str) -> Any | None:
         """Get full account data for exchange.
         
         Args:
@@ -232,13 +230,13 @@ class OrdersCache:
                 if data:
                     return json.loads(data)
             return None
-        except (TypeError, KeyError) as error:
+        except (TypeError, KeyError):
             return None
         except Exception as e:
             logger.error(f"Failed to get full accounts: {e}")
             return None
-    
-    def _dict_to_order(self, data: Dict[str, Any]) -> Optional[Order]:
+
+    def _dict_to_order(self, data: dict[str, Any]) -> Order | None:
         """Convert dictionary to ORM Order object.
         
         Args:
@@ -250,7 +248,7 @@ class OrdersCache:
         try:
             # Clean and prepare data for ORM
             clean_data = {}
-            
+
             # Handle order_id and ex_order_id
             if 'order_id' in data:
                 # Try to convert to int for order_id
@@ -260,10 +258,10 @@ class OrdersCache:
                         clean_data['order_id'] = int(order_id_val)
                 except (ValueError, TypeError):
                     pass
-                
+
                 # Always store as string for ex_order_id
                 clean_data['ex_order_id'] = str(data['order_id'])
-            
+
             # Handle numeric fields with proper conversion
             numeric_fields = {
                 'volume': 0.0,
@@ -272,7 +270,7 @@ class OrdersCache:
                 'plimit': None,
                 'leverage': None
             }
-            
+
             for field, default in numeric_fields.items():
                 if field in data and data[field] is not None:
                     try:
@@ -280,38 +278,38 @@ class OrdersCache:
                     except (ValueError, TypeError):
                         if default is not None:
                             clean_data[field] = default
-            
+
             # Handle boolean fields
             if 'futures' in data:
                 clean_data['futures'] = bool(data.get('futures', False))
-            
+
             # Handle timestamp
             if 'timestamp' in data:
-                clean_data['timestamp'] = self._cache._from_redis_timestamp(data['timestamp']) or datetime.now(timezone.utc)
+                clean_data['timestamp'] = self._cache._from_redis_timestamp(data['timestamp']) or datetime.now(UTC)
             else:
-                clean_data['timestamp'] = datetime.now(timezone.utc)
-            
+                clean_data['timestamp'] = datetime.now(UTC)
+
             # Copy string fields directly
             string_fields = ['exchange', 'symbol', 'order_type', 'side', 'status', 'command', 'reason']
             for field in string_fields:
                 if field in data:
                     clean_data[field] = str(data[field]) if data[field] is not None else ''
-            
+
             # Copy other fields as-is
             other_fields = ['bot_id', 'uid', 'ex_id', 'cat_ex_id', 'tick']
             for field in other_fields:
                 if field in data and data[field] is not None:
                     clean_data[field] = data[field]
-            
+
             # Use ORM's from_dict method
             return Order.from_dict(clean_data)
-            
+
         except Exception as e:
             logger.error(f"Failed to convert dict to Order: {e}")
             return None
-    
-    
-    def _order_to_dict(self, order: Order) -> Dict[str, Any]:
+
+
+    def _order_to_dict(self, order: Order) -> dict[str, Any]:
         """Convert ORM Order object to dictionary.
         
         Args:
@@ -323,17 +321,17 @@ class OrdersCache:
         try:
             # Use ORM's to_dict method if available
             data = order.to_dict()
-            
+
             # Ensure timestamp is ISO formatted
             if 'timestamp' in data and isinstance(data['timestamp'], datetime):
                 data['timestamp'] = self._cache._to_redis_timestamp(data['timestamp'])
-            
+
             # Ensure order_id is included
             if hasattr(order, 'order_id') and order.order_id:
                 data['order_id'] = order.order_id
             elif hasattr(order, 'ex_order_id') and order.ex_order_id:
                 data['order_id'] = order.ex_order_id
-            
+
             return data
         except Exception as e:
             logger.error(f"Failed to convert Order to dict: {e}")

@@ -6,8 +6,8 @@ managing exchange/symbol blocking and bot status tracking.
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Dict, List, Union, Any
+from datetime import UTC, datetime
+from typing import Any
 
 from .base_cache import BaseCache
 
@@ -43,11 +43,11 @@ class BotCache:
             "feed_2": {"status": "paused", "symbols": ["ETH/USDT"]}
         })
     """
-    
+
     def __init__(self):
         """Initialize the bot cache."""
         self._cache = BaseCache()
-    
+
     async def is_blocked(self, ex_id: str, symbol: str) -> str:
         """Check if exchange/symbol is blocked.
         
@@ -65,8 +65,8 @@ class BotCache:
         except Exception as e:
             logger.error(f"Error checking if blocked: {e}")
             return ""
-    
-    async def get_blocks(self) -> List[Dict[str, str]]:
+
+    async def get_blocks(self) -> list[dict[str, str]]:
         """Get all blocked exchange/symbol pairs.
         
         Returns:
@@ -75,7 +75,7 @@ class BotCache:
         blocks = []
         try:
             data = await self._cache.hgetall("block_exchange")
-            
+
             for field, value in data.items():
                 # Parse field
                 if ":" in field:
@@ -87,10 +87,10 @@ class BotCache:
                     })
         except Exception as e:
             logger.error(f"Error getting blocks: {e}")
-        
+
         return blocks
-    
-    async def block_exchange(self, ex_id: str, symbol: str, bot_id: Union[str, int]) -> bool:
+
+    async def block_exchange(self, ex_id: str, symbol: str, bot_id: str | int) -> bool:
         """Block exchange/symbol pair.
         
         Args:
@@ -110,7 +110,7 @@ class BotCache:
         except Exception as e:
             logger.error(f"Error blocking exchange: {e}")
             return False
-    
+
     async def unblock_exchange(self, ex_id: str, symbol: str) -> bool:
         """Unblock exchange/symbol pair.
         
@@ -129,7 +129,7 @@ class BotCache:
         except Exception as e:
             logger.error(f"Error unblocking exchange: {e}")
             return False
-    
+
     async def is_opening_position(self, ex_id: str, symbol: str) -> bool:
         """Check if position is being opened on exchange/symbol.
         
@@ -148,8 +148,8 @@ class BotCache:
         except Exception as e:
             logger.error(f"Error checking opening position: {e}")
             return False
-    
-    async def mark_opening_position(self, ex_id: str, symbol: str, bot_id: Union[str, int]) -> bool:
+
+    async def mark_opening_position(self, ex_id: str, symbol: str, bot_id: str | int) -> bool:
         """Mark position as opening on exchange/symbol.
         
         Args:
@@ -162,14 +162,14 @@ class BotCache:
         """
         try:
             field = f"{ex_id}:{symbol}"
-            value = f"{bot_id}:{datetime.now(timezone.utc).isoformat()}"
+            value = f"{bot_id}:{datetime.now(UTC).isoformat()}"
             # Set in hash
             result = await self._cache.hset("opening_position", field, value)
             return True  # Success regardless of new or update
         except Exception as e:
             logger.error(f"Error marking opening position: {e}")
             return False
-    
+
     async def unmark_opening_position(self, ex_id: str, symbol: str) -> bool:
         """Unmark position opening on exchange/symbol.
         
@@ -188,8 +188,8 @@ class BotCache:
         except Exception as e:
             logger.error(f"Error unmarking opening position: {e}")
             return False
-    
-    async def update_bot(self, bot_id: str, bot: Dict[str, Union[str, int, float]]) -> bool:
+
+    async def update_bot(self, bot_id: str, bot: dict[str, str | int | float]) -> bool:
         """Update bot status with feed structure.
         
         Args:
@@ -214,11 +214,11 @@ class BotCache:
         """
         try:
             # Add timestamp to each feed
-            timestamp = datetime.now(timezone.utc).isoformat()
+            timestamp = datetime.now(UTC).isoformat()
             for feed_status in bot.values():
                 if isinstance(feed_status, dict):
                     feed_status["timestamp"] = timestamp
-            
+
             field = str(bot_id)
             value = json.dumps(bot)
             # Save to hash
@@ -227,7 +227,7 @@ class BotCache:
         except Exception as e:
             logger.error(f"Error updating bot: {e}")
             return False
-    
+
     async def del_bot(self, bot_id: str) -> bool:
         """Delete bot status.
         
@@ -245,7 +245,7 @@ class BotCache:
         except Exception as e:
             logger.error(f"Error deleting bot: {e}")
             return False
-    
+
     async def del_status(self) -> bool:
         """Delete all bot statuses.
         
@@ -261,8 +261,8 @@ class BotCache:
         except Exception as e:
             logger.error(f"Error deleting all statuses: {e}")
             return False
-    
-    async def get_bots(self) -> Dict[str, Dict[str, Any]]:
+
+    async def get_bots(self) -> dict[str, dict[str, Any]]:
         """Get all bots and their statuses.
         
         Returns:
@@ -281,7 +281,7 @@ class BotCache:
         try:
             # Get all hash entries
             data = await self._cache.hgetall("bot_status")
-            
+
             for bot_id, bot_status in data.items():
                 try:
                     # Parse JSON
@@ -293,5 +293,5 @@ class BotCache:
         except Exception as e:
             logger.error(f"Failed to get bot statuses from Redis: {e}")
             raise
-        
+
         return bots

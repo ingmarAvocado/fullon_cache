@@ -9,16 +9,11 @@ Example:
     print(api_reference.TICK_CACHE)
 """
 
-from . import quickstart
-from . import api_reference
-from . import caching_guide
-from . import testing_guide
-from . import migration
-from . import performance
+from . import api_reference, caching_guide, migration, performance, quickstart, testing_guide
 
 __all__ = [
     'quickstart',
-    'api_reference', 
+    'api_reference',
     'caching_guide',
     'testing_guide',
     'migration',

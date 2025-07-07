@@ -5,13 +5,13 @@ with real Redis instances and proper isolation for parallel execution.
 """
 
 import asyncio
+import logging
 import os
+from collections.abc import AsyncGenerator
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
 import pytest_asyncio
-import logging
-from typing import AsyncGenerator, Optional
-from datetime import datetime, timezone
-from unittest.mock import Mock, AsyncMock, patch
 from dotenv import load_dotenv
 
 # Ensure test environment is loaded
@@ -22,8 +22,15 @@ logger = logging.getLogger(__name__)
 
 # Import cache modules (will be available after implementation)
 from fullon_cache import (
-    BaseCache, ProcessCache, TickCache, OrdersCache,
-    AccountCache, BotCache, TradesCache, OHLCVCache, ConnectionPool
+    AccountCache,
+    BaseCache,
+    BotCache,
+    ConnectionPool,
+    OHLCVCache,
+    OrdersCache,
+    ProcessCache,
+    TickCache,
+    TradesCache,
 )
 
 
@@ -74,17 +81,17 @@ def redis_db(worker_id, request) -> int:
         "test_ohlcv_cache.py": 10,
         "test_imports.py": 11,
     }
-    
+
     # Get the test file name
     test_file = os.path.basename(request.node.fspath)
-    
+
     # Get DB number from map, or use hash-based assignment for unknown files
     if test_file in test_file_db_map:
         db_num = test_file_db_map[test_file]
     else:
         # Hash the filename to get a consistent DB number
         db_num = (hash(test_file) % 14) + 1  # 1-14 range
-    
+
     # If running in parallel with xdist, offset by worker number
     if worker_id != "master":
         try:
@@ -94,7 +101,7 @@ def redis_db(worker_id, request) -> int:
             db_num = ((db_num + worker_num * 14) % 15) + 1
         except:
             pass
-    
+
     # Set environment variable for this test
     os.environ['REDIS_DB'] = str(db_num)
     return db_num
@@ -118,25 +125,25 @@ def redis_db_per_file(request):
         "test_ohlcv_cache.py": 10,
         "test_imports.py": 11,
     }
-    
+
     db_num = test_file_db_map.get(test_file, 1)
     os.environ['REDIS_DB'] = str(db_num)
     print(f"\n[DB SELECT] Using Redis DB {db_num} for test file {test_file}")
-    
+
     yield db_num
-    
+
     # Reset after module
     ConnectionPool.reset()
 
 
 @pytest_asyncio.fixture
-async def clean_redis(redis_db) -> AsyncGenerator[None, None]:
+async def clean_redis(redis_db) -> AsyncGenerator[None]:
     """Ensure Redis is clean for each test."""
     # Reset connection pool
     await ConnectionPool.reset_async()
-    
+
     yield
-    
+
     # Light cleanup after each test
     try:
         await ConnectionPool.reset_async()
@@ -154,7 +161,7 @@ async def base_cache(clean_redis) -> BaseCache:
 async def process_cache(clean_redis) -> ProcessCache:
     """Provide a clean ProcessCache instance."""
     cache = ProcessCache()
-    
+
     # Clear any existing process data
     # ProcessCache uses key_prefix="process", so keys are like:
     # process:data:*, process:active:*, process:component:*, process:heartbeat:*
@@ -162,9 +169,9 @@ async def process_cache(clean_redis) -> ProcessCache:
     await cache._cache.delete_pattern("active:*")
     await cache._cache.delete_pattern("component:*")
     await cache._cache.delete_pattern("heartbeat:*")
-    
+
     yield cache
-    
+
     # Cleanup after test
     try:
         await cache._cache.delete_pattern("data:*")
@@ -179,7 +186,7 @@ async def process_cache(clean_redis) -> ProcessCache:
 async def tick_cache(clean_redis) -> TickCache:
     """Provide a clean TickCache instance."""
     cache = TickCache()
-    
+
     # Clear any existing ticker data
     await cache.delete_pattern("ticker:*")
     await cache.delete_pattern("active:*")  # Active exchanges tracking
@@ -190,9 +197,9 @@ async def tick_cache(clean_redis) -> TickCache:
     await cache.delete_pattern("symbols")  # Symbol index
     await cache.delete_pattern("*:BTC*")  # Any BTC related keys
     await cache.delete_pattern("*:ETH*")  # Any ETH related keys
-    
+
     yield cache
-    
+
     # Cleanup after test
     try:
         await cache.delete_pattern("ticker:*")
@@ -209,7 +216,7 @@ async def tick_cache(clean_redis) -> TickCache:
 async def orders_cache(clean_redis) -> OrdersCache:
     """Provide a clean OrdersCache instance."""
     cache = OrdersCache()
-    
+
     # Clear any existing order data
     # Note: OrdersCache uses key_prefix="order"
     await cache._cache.delete_pattern("queue:*")  # Order queues by exchange
@@ -218,13 +225,13 @@ async def orders_cache(clean_redis) -> OrdersCache:
     await cache._cache.delete_pattern("bot:*")     # Bot order indexes
     await cache._cache.delete_pattern("open_orders")  # Legacy patterns
     await cache._cache.delete_pattern("order_status:*")  # Legacy patterns
-    
+
     # Clear accounts hash used by get_full_accounts (non-prefixed key)
     async with cache._cache._redis_context() as redis_client:
         await redis_client.delete("accounts")
-    
+
     yield cache
-    
+
     # Cleanup after test
     try:
         await cache._cache.delete_pattern("queue:*")
@@ -244,7 +251,7 @@ async def orders_cache(clean_redis) -> OrdersCache:
 async def account_cache(clean_redis) -> AccountCache:
     """Provide a clean AccountCache instance."""
     cache = AccountCache()
-    
+
     # Clear any existing positions and account data
     # Account keys use "account:data:{user_id}:{exchange}" pattern
     await cache._cache.delete_pattern("account:data:*")
@@ -252,9 +259,9 @@ async def account_cache(clean_redis) -> AccountCache:
     await cache._cache.delete_pattern("account:position:*")
     await cache._cache.delete_pattern("account:users:*")
     await cache._cache.delete_pattern("account:global_positions")
-    
+
     yield cache
-    
+
     # Cleanup after test
     try:
         await cache._cache.delete_pattern("account:data:*")
@@ -270,7 +277,7 @@ async def account_cache(clean_redis) -> AccountCache:
 async def bot_cache(clean_redis) -> BotCache:
     """Provide a clean BotCache instance."""
     cache = BotCache()
-    
+
     # Clear any existing bot data
     await cache._cache.delete_pattern("bot:lock:*")  # Symbol locks
     await cache._cache.delete_pattern("bot:locks:*")  # Bot's active locks list
@@ -282,9 +289,9 @@ async def bot_cache(clean_redis) -> BotCache:
     await cache._cache.delete("block_exchange")
     await cache._cache.delete("opening_position")
     await cache._cache.delete("bot_status")
-    
+
     yield cache
-    
+
     # Cleanup after test
     try:
         await cache._cache.delete_pattern("bot:lock:*")
@@ -305,7 +312,7 @@ async def bot_cache(clean_redis) -> BotCache:
 async def trades_cache(clean_redis) -> TradesCache:
     """Provide a clean TradesCache instance."""
     cache = TradesCache()
-    
+
     # Clear any existing trades data
     # TradesCache uses key_prefix="trade"
     await cache._cache.delete_pattern("queue:*")     # Trade queues by exchange
@@ -314,7 +321,7 @@ async def trades_cache(clean_redis) -> TradesCache:
     await cache._cache.delete_pattern("bot:*")       # Bot trades indexes
     await cache._cache.delete_pattern("list:*")      # Legacy patterns
     await cache._cache.delete_pattern("trades_list") # Legacy patterns
-    
+
     # Clear legacy keys that are stored without prefix
     async with cache._cache._redis_context() as redis_client:
         # Scan for user_trades keys and delete them
@@ -323,9 +330,9 @@ async def trades_cache(clean_redis) -> TradesCache:
         # Scan for legacy trades: pattern keys and delete them
         async for key in redis_client.scan_iter(match="trades:*"):
             await redis_client.delete(key)
-    
+
     yield cache
-    
+
     # Cleanup after test
     try:
         await cache._cache.delete_pattern("queue:*")
@@ -348,15 +355,15 @@ async def trades_cache(clean_redis) -> TradesCache:
 async def ohlcv_cache(clean_redis) -> OHLCVCache:
     """Provide a clean OHLCVCache instance."""
     cache = OHLCVCache()
-    
+
     # Clear any existing OHLCV data
     # OHLCV cache keys use pattern: ohlcv:{exchange}:{symbol}:{timeframe}
     # and metadata keys: ohlcv:meta:{exchange}:{symbol}:{timeframe}
     await cache._cache.delete_pattern("*:*:*")  # Clear all OHLCV data keys
     await cache._cache.delete_pattern("meta:*:*:*")  # Clear all metadata keys
-    
+
     yield cache
-    
+
     # Cleanup after test
     try:
         await cache._cache.delete_pattern("*:*:*")
@@ -369,10 +376,10 @@ async def ohlcv_cache(clean_redis) -> OHLCVCache:
 async def symbol_cache(clean_redis):
     """Provide a clean SymbolCache instance with proper isolation."""
     from fullon_cache import SymbolCache
-    
+
     # Create a fresh instance
     cache = SymbolCache()
-    
+
     # Ensure the cache is completely empty before yielding
     # Clear any potential leftover data
     await cache.delete_pattern("symbol:*")
@@ -383,9 +390,9 @@ async def symbol_cache(clean_redis):
     await cache.delete_pattern("active")
     await cache.delete_pattern("symbols_list:*")  # Legacy format
     await cache.delete_pattern("tickers:*")  # Legacy format
-    
+
     yield cache
-    
+
     # Post-test cleanup (though clean_redis should handle most of it)
     try:
         # Clear all symbol-related keys again
@@ -409,14 +416,14 @@ from pathlib import Path
 factories_path = Path(__file__).parent / "factories"
 sys.path.insert(0, str(factories_path))
 
-from ticker import TickerFactory
+from account import AccountFactory, PositionFactory
+from bot import BotFactory
+from ohlcv import OHLCVFactory
 from order import OrderFactory
 from process import ProcessFactory
 from symbol import SymbolFactory
+from ticker import TickerFactory
 from trade import TradeFactory
-from ohlcv import OHLCVFactory
-from account import AccountFactory, PositionFactory
-from bot import BotFactory
 
 
 @pytest.fixture
@@ -481,30 +488,30 @@ def mock_fullon_orm_repositories():
         async def session_generator():
             yield Mock()
         mock_session.return_value = session_generator()
-        
+
         # Mock SymbolRepository
         with patch('fullon_orm.repositories.SymbolRepository') as mock_sym_repo_class:
             mock_sym_repo = AsyncMock()
-            
+
             # Default behavior: return None for not found
             mock_sym_repo.get_by_symbol = AsyncMock(return_value=None)
             mock_sym_repo.get_by_id = AsyncMock(return_value=None)
             mock_sym_repo.get_by_exchange_id = AsyncMock(return_value=[])
-            
+
             mock_sym_repo_class.return_value = mock_sym_repo
-            
+
             # Mock ExchangeRepository
             with patch('fullon_orm.repositories.ExchangeRepository') as mock_ex_repo_class:
                 mock_ex_repo = AsyncMock()
-                
+
                 # Default behavior
                 mock_ex_repo.get_by_id = AsyncMock(return_value=None)
                 mock_ex_repo.get_exchange_by_name = AsyncMock(return_value=None)
                 mock_ex_repo.get_exchange_by_id = AsyncMock(return_value=None)
                 mock_ex_repo.get_all = AsyncMock(return_value=[])
-                
+
                 mock_ex_repo_class.return_value = mock_ex_repo
-                
+
                 yield {
                     'session': mock_session,
                     'symbol_repo': mock_sym_repo,
@@ -526,14 +533,14 @@ async def wait_for_condition(condition_func, timeout=5, interval=0.1):
         TimeoutError: If condition is not met within timeout
     """
     start_time = asyncio.get_event_loop().time()
-    
+
     while True:
         if await condition_func():
             return
-            
+
         if asyncio.get_event_loop().time() - start_time > timeout:
             raise TimeoutError(f"Condition not met within {timeout} seconds")
-            
+
         await asyncio.sleep(interval)
 
 
@@ -545,7 +552,7 @@ def benchmark_async():
     class AsyncBenchmark:
         def __init__(self):
             self.times = []
-            
+
         async def __call__(self, func, *args, **kwargs):
             import time
             start = time.perf_counter()
@@ -553,7 +560,7 @@ def benchmark_async():
             elapsed = time.perf_counter() - start
             self.times.append(elapsed)
             return result
-            
+
         @property
         def stats(self):
             if not self.times:
@@ -565,7 +572,7 @@ def benchmark_async():
                 'total': sum(self.times),
                 'count': len(self.times),
             }
-    
+
     return AsyncBenchmark()
 
 
@@ -619,48 +626,48 @@ async def full_isolation(clean_redis):
     """
     # Extra pre-test cleanup
     temp_cache = BaseCache()
-    
+
     # Clear ALL possible patterns that might be used
     patterns = [
         "symbol:*", "exchange:*", "id:*", "quote:*", "base:*",
         "tick:*", "tickers:*", "order:*", "trade:*", "ohlcv:*",
         "bot:*", "lock:*", "account:*", "position:*", "process:*"
     ]
-    
+
     for pattern in patterns:
         try:
             await temp_cache.delete_pattern(pattern)
         except:
             pass
-    
+
     await temp_cache.close()
-    
+
     # Extra delay to ensure everything is cleaned
     await asyncio.sleep(0.02)
-    
+
     yield
-    
+
     # Extra post-test cleanup
     cleanup_cache = BaseCache()
-    
+
     for pattern in patterns:
         try:
             await cleanup_cache.delete_pattern(pattern)
         except:
             pass
-    
+
     await cleanup_cache.close()
-    
+
     # Force complete reset
     await ConnectionPool.reset_async()
-    
+
     import gc
     gc.collect()
-    
+
     await asyncio.sleep(0.02)
-    
+
     yield
-    
+
     # Cleanup is handled by individual test fixtures
 
 

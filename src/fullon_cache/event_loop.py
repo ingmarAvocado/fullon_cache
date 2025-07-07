@@ -9,8 +9,8 @@ import asyncio
 import logging
 import os
 import sys
-from typing import Optional, Dict, Any
 from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +46,8 @@ class EventLoopManager:
         # Check what's currently active
         print(f"Active policy: {manager.get_active_policy()}")
     """
-    
-    def __init__(self, policy: Optional[EventLoopPolicy] = None, 
+
+    def __init__(self, policy: EventLoopPolicy | None = None,
                  force_policy: bool = False):
         """Initialize the event loop manager.
         
@@ -57,9 +57,9 @@ class EventLoopManager:
         """
         self.policy = policy or self._get_policy_from_env()
         self.force_policy = force_policy
-        self._active_policy: Optional[EventLoopPolicy] = None
-        self._uvloop_available: Optional[bool] = None
-        
+        self._active_policy: EventLoopPolicy | None = None
+        self._uvloop_available: bool | None = None
+
     def _get_policy_from_env(self) -> EventLoopPolicy:
         """Get event loop policy from environment variables.
         
@@ -67,7 +67,7 @@ class EventLoopManager:
             EventLoopPolicy based on FULLON_CACHE_EVENT_LOOP env var
         """
         env_policy = os.getenv('FULLON_CACHE_EVENT_LOOP', 'auto').lower()
-        
+
         try:
             return EventLoopPolicy(env_policy)
         except ValueError:
@@ -76,7 +76,7 @@ class EventLoopManager:
                 f"Valid options: {[p.value for p in EventLoopPolicy]}"
             )
             return EventLoopPolicy.AUTO
-    
+
     def _is_uvloop_available(self) -> bool:
         """Check if uvloop is available and can be imported.
         
@@ -85,13 +85,13 @@ class EventLoopManager:
         """
         if self._uvloop_available is not None:
             return self._uvloop_available
-            
+
         # Check platform compatibility
         if sys.platform == 'win32':
             logger.debug("uvloop not supported on Windows")
             self._uvloop_available = False
             return False
-            
+
         try:
             import uvloop
             self._uvloop_available = True
@@ -101,7 +101,7 @@ class EventLoopManager:
             logger.debug("uvloop not installed or not available")
             self._uvloop_available = False
             return False
-    
+
     def configure(self) -> EventLoopPolicy:
         """Configure the optimal event loop policy.
         
@@ -115,7 +115,7 @@ class EventLoopManager:
             RuntimeError: If forced policy is not available
         """
         target_policy = self._determine_target_policy()
-        
+
         try:
             if target_policy == EventLoopPolicy.UVLOOP:
                 self._configure_uvloop()
@@ -129,18 +129,18 @@ class EventLoopManager:
                 else:
                     self._configure_asyncio()
                     target_policy = EventLoopPolicy.ASYNCIO
-                    
+
             self._active_policy = target_policy
             logger.info(f"Event loop configured: {target_policy.value}")
-            
+
             return target_policy
-            
+
         except Exception as e:
             if self.force_policy:
                 raise RuntimeError(
                     f"Failed to configure forced policy {target_policy.value}: {e}"
                 )
-            
+
             # Fallback to asyncio
             logger.warning(
                 f"Failed to configure {target_policy.value}, falling back to asyncio: {e}"
@@ -148,7 +148,7 @@ class EventLoopManager:
             self._configure_asyncio()
             self._active_policy = EventLoopPolicy.ASYNCIO
             return EventLoopPolicy.ASYNCIO
-    
+
     def _determine_target_policy(self) -> EventLoopPolicy:
         """Determine which policy should be configured.
         
@@ -166,7 +166,7 @@ class EventLoopManager:
             return EventLoopPolicy.UVLOOP
         else:
             return EventLoopPolicy.ASYNCIO
-    
+
     def _configure_uvloop(self) -> None:
         """Configure uvloop as the event loop policy.
         
@@ -176,19 +176,19 @@ class EventLoopManager:
         """
         try:
             import uvloop
-            
+
             # Install uvloop as the default event loop policy
             asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-            
+
             logger.debug(
                 f"uvloop {uvloop.__version__} configured as event loop policy"
             )
-            
+
         except ImportError as e:
             raise ImportError(f"uvloop is not available: {e}")
         except Exception as e:
             raise RuntimeError(f"Failed to configure uvloop: {e}")
-    
+
     def _configure_asyncio(self) -> None:
         """Configure standard asyncio as the event loop policy."""
         # Reset to default asyncio policy
@@ -202,16 +202,16 @@ class EventLoopManager:
             # Use default policy on Unix systems
             asyncio.set_event_loop_policy(None)
             logger.debug("Default asyncio event loop policy configured")
-    
-    def get_active_policy(self) -> Optional[EventLoopPolicy]:
+
+    def get_active_policy(self) -> EventLoopPolicy | None:
         """Get the currently active event loop policy.
         
         Returns:
             The active EventLoopPolicy or None if not configured
         """
         return self._active_policy
-    
-    def get_policy_info(self) -> Dict[str, Any]:
+
+    def get_policy_info(self) -> dict[str, Any]:
         """Get detailed information about the current event loop configuration.
         
         Returns:
@@ -225,7 +225,7 @@ class EventLoopManager:
             'python_version': sys.version,
             'force_policy': self.force_policy,
         }
-        
+
         # Add performance expectations
         if self._active_policy == EventLoopPolicy.UVLOOP:
             info['expected_performance'] = {
@@ -239,7 +239,7 @@ class EventLoopManager:
                 'memory_efficiency': 'Standard',
                 'concurrency_support': 'Good (10k+ connections)',
             }
-        
+
         # Add current loop info if available
         try:
             loop = asyncio.get_running_loop()
@@ -249,10 +249,10 @@ class EventLoopManager:
             }
         except RuntimeError:
             info['current_loop'] = None
-        
+
         return info
-    
-    async def benchmark_policy(self, duration: float = 1.0) -> Dict[str, Any]:
+
+    async def benchmark_policy(self, duration: float = 1.0) -> dict[str, Any]:
         """Run a simple benchmark of the current event loop policy.
         
         Args:
@@ -262,19 +262,19 @@ class EventLoopManager:
             Dict with benchmark results
         """
         import time
-        
+
         async def benchmark_task():
             """Simple benchmark task."""
             start_time = time.perf_counter()
             operations = 0
-            
+
             while time.perf_counter() - start_time < duration:
                 # Simple async operation
                 await asyncio.sleep(0)
                 operations += 1
-                
+
             return operations
-        
+
         try:
             # Check if we're already in an event loop
             try:
@@ -288,7 +288,7 @@ class EventLoopManager:
                 start_time = time.perf_counter()
                 operations = asyncio.run(benchmark_task())
                 total_time = time.perf_counter() - start_time
-            
+
             return {
                 'policy': self._active_policy.value if self._active_policy else 'unknown',
                 'duration': total_time,
@@ -296,7 +296,7 @@ class EventLoopManager:
                 'ops_per_second': operations / total_time,
                 'avg_op_time_us': (total_time / operations) * 1_000_000 if operations > 0 else 0,
             }
-            
+
         except Exception as e:
             return {
                 'error': str(e),
@@ -305,7 +305,7 @@ class EventLoopManager:
 
 
 # Global event loop manager instance
-_global_manager: Optional[EventLoopManager] = None
+_global_manager: EventLoopManager | None = None
 
 
 def get_event_loop_manager() -> EventLoopManager:
@@ -320,7 +320,7 @@ def get_event_loop_manager() -> EventLoopManager:
     return _global_manager
 
 
-def configure_event_loop(policy: Optional[EventLoopPolicy] = None, 
+def configure_event_loop(policy: EventLoopPolicy | None = None,
                         force: bool = False) -> EventLoopPolicy:
     """Configure the global event loop policy.
     
@@ -347,7 +347,7 @@ def configure_event_loop(policy: Optional[EventLoopPolicy] = None,
     return _global_manager.configure()
 
 
-def get_policy_info() -> Dict[str, Any]:
+def get_policy_info() -> dict[str, Any]:
     """Get information about the current event loop configuration.
     
     Returns:
@@ -367,7 +367,7 @@ def is_uvloop_active() -> bool:
     return manager.get_active_policy() == EventLoopPolicy.UVLOOP
 
 
-async def benchmark_current_policy(duration: float = 1.0) -> Dict[str, Any]:
+async def benchmark_current_policy(duration: float = 1.0) -> dict[str, Any]:
     """Benchmark the current event loop policy.
     
     Args:

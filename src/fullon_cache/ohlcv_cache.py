@@ -6,7 +6,6 @@ for trading symbols and timeframes.
 
 import json
 import logging
-from typing import List
 
 from .base_cache import BaseCache
 
@@ -36,12 +35,12 @@ class OHLCVCache:
         # Get recent bars
         recent = await cache.get_latest_ohlcv_bars("BTCUSD", "1h", 100)
     """
-    
+
     def __init__(self):
         """Initialize the OHLCV cache."""
         self._cache = BaseCache()
-    
-    async def update_ohlcv_bars(self, symbol: str, timeframe: str, bars: List[List[float]]) -> None:
+
+    async def update_ohlcv_bars(self, symbol: str, timeframe: str, bars: list[list[float]]) -> None:
         """Store OHLCV bars for a symbol/timeframe.
         
         Args:
@@ -58,30 +57,30 @@ class OHLCVCache:
         """
         if not bars:
             return
-        
+
         try:
             # Create key without slashes
             key = f"ohlcv:{symbol}:{timeframe}"
-            
+
             # Convert bars to JSON strings
             bar_strings = []
             for bar in bars:
                 if isinstance(bar, list) and len(bar) >= 6:
                     bar_strings.append(json.dumps(bar))
-            
+
             if not bar_strings:
                 return
-            
+
             # Store bars (append to list)
             await self._cache.rpush(key, *bar_strings)
-            
+
             # Keep only the most recent 10000 bars
             await self._cache.ltrim(key, -10000, -1)
-            
+
         except Exception as e:
             logger.error(f"Error updating OHLCV bars: {e}")
-    
-    async def get_latest_ohlcv_bars(self, symbol: str, timeframe: str, count: int) -> List[List[float]]:
+
+    async def get_latest_ohlcv_bars(self, symbol: str, timeframe: str, count: int) -> list[list[float]]:
         """Get the most recent N OHLCV bars.
         
         Args:
@@ -99,10 +98,10 @@ class OHLCVCache:
         try:
             # Create key without slashes
             key = f"ohlcv:{symbol}:{timeframe}"
-            
+
             # Get recent bars from end of list
             bar_strings = await self._cache.lrange(key, -count, -1)
-            
+
             bars = []
             for bar_str in bar_strings:
                 try:
@@ -111,9 +110,9 @@ class OHLCVCache:
                         bars.append(bar)
                 except json.JSONDecodeError:
                     logger.error(f"Failed to parse OHLCV bar: {bar_str}")
-            
+
             return bars
-            
+
         except Exception as e:
             logger.error(f"Error getting OHLCV bars: {e}")
             return []
