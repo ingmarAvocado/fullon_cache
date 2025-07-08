@@ -27,25 +27,62 @@ async def ticker_operations():
     tick_cache = TickCache()
     
     try:
-        # Update ticker data
+        # === NEW ORM-BASED METHODS (RECOMMENDED) ===
+        print("\\n--- Using ORM-based methods ---")
+        
+        # Import fullon_orm Tick model
+        from fullon_orm.models import Tick
+        import time
+        
+        # Create ticker with ORM model
+        tick = Tick(
+            symbol="BTC/USDT",
+            exchange="binance",
+            price=50000.0,
+            volume=1234.56,
+            time=time.time(),
+            bid=49999.0,
+            ask=50001.0,
+            last=50000.5
+        )
+        
+        print(f"Storing ticker (ORM): BTC/USDT @ ${tick.price}")
+        success = await tick_cache.update_ticker_orm("binance", tick)
+        print(f"Update successful: {success}")
+        
+        # Get ticker as ORM model
+        ticker = await tick_cache.get_ticker_orm("BTC/USDT", "binance")
+        if ticker:
+            print(f"Retrieved ticker (ORM): ${ticker.price}, Volume: {ticker.volume}")
+            print(f"Spread: ${ticker.spread:.2f}, Spread %: {ticker.spread_percentage:.4f}%")
+        
+        # Get price tick from any exchange
+        price_tick = await tick_cache.get_price_tick_orm("BTC/USDT")
+        if price_tick:
+            print(f"Best price (ORM): ${price_tick.price} on {price_tick.exchange}")
+        
+        # === LEGACY METHODS (STILL SUPPORTED) ===
+        print("\\n--- Using legacy methods ---")
+        
+        # Update ticker data (legacy)
         ticker_data = {
             "bid": 50000.0,
             "ask": 50001.0,
             "last": 50000.5,
             "volume": 1234.56,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "time": datetime.now(timezone.utc).isoformat()
         }
         
-        print(f"Storing ticker: BTC/USDT @ ${ticker_data['last']}")
+        print(f"Storing ticker (legacy): BTC/USDT @ ${ticker_data['last']}")
         await tick_cache.update_ticker("BTC/USDT", "binance", ticker_data)
         
         # Get ticker price and timestamp
         price, timestamp = await tick_cache.get_ticker("BTC/USDT", "binance")
-        print(f"Retrieved price: ${price} at {timestamp}")
+        print(f"Retrieved price (legacy): ${price} at {timestamp}")
         
         # Get price from any exchange
         any_price = await tick_cache.get_ticker_any("BTC/USDT")
-        print(f"Price from any exchange: ${any_price}")
+        print(f"Price from any exchange (legacy): ${any_price}")
         
         # Get all tickers for an exchange
         tickers = await tick_cache.get_tickers("binance")

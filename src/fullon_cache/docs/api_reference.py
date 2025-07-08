@@ -322,14 +322,36 @@ TICK_CACHE = """
 TickCache API Reference
 =======================
 
-Real-time ticker data management.
+Real-time ticker data management with fullon_orm.Tick model support.
 
 Class: TickCache()
 ------------------
 
 Inherits from: SymbolCache
 
-Ticker Operations:
+New ORM-Based Methods (Recommended):
+    await update_ticker_orm(exchange: str, ticker: Tick) -> bool
+        Update ticker using fullon_orm.Tick model
+        Args:
+            exchange: Exchange name
+            ticker: fullon_orm.Tick model instance
+        Returns: True if successful, False otherwise
+        
+    await get_ticker_orm(symbol: str, exchange: str) -> Optional[Tick]
+        Get ticker as fullon_orm.Tick model
+        Args:
+            symbol: Trading symbol (e.g., "BTC/USDT")
+            exchange: Exchange name (e.g., "binance")
+        Returns: fullon_orm.Tick model or None if not found
+        
+    await get_price_tick_orm(symbol: str, exchange: Optional[str] = None) -> Optional[Tick]
+        Get full tick data (not just price) as fullon_orm.Tick model
+        Args:
+            symbol: Trading symbol
+            exchange: Exchange name (optional, searches all exchanges if None)
+        Returns: fullon_orm.Tick model or None if not found
+
+Legacy Methods (Backward Compatible):
     await update_ticker(symbol: str, exchange: str, data: Dict[str, Any]) -> int
         Update ticker data and publish to subscribers
         
@@ -361,15 +383,52 @@ Utility:
     await get_tick_crawlers() -> Dict[str, Any]
         Get tick crawler configuration
 
-Example:
+Examples:
+
+New ORM-Based Usage (Recommended):
+    from fullon_orm.models import Tick
+    import time
+    
     cache = TickCache()
     
-    # Update ticker
+    # Create and update ticker with ORM model
+    tick = Tick(
+        symbol="BTC/USDT",
+        exchange="binance",
+        price=50000.0,
+        volume=1234.56,
+        time=time.time(),
+        bid=49999.0,
+        ask=50001.0,
+        last=50000.5
+    )
+    
+    success = await cache.update_ticker_orm("binance", tick)
+    if success:
+        print("Ticker updated successfully")
+    
+    # Get ticker as ORM model
+    ticker = await cache.get_ticker_orm("BTC/USDT", "binance")
+    if ticker:
+        print(f"Price: {ticker.price}, Volume: {ticker.volume}")
+        print(f"Spread: {ticker.spread}, Spread %: {ticker.spread_percentage}")
+    
+    # Get price tick from any exchange
+    price_tick = await cache.get_price_tick_orm("BTC/USDT")
+    if price_tick:
+        print(f"Best price: {price_tick.price} on {price_tick.exchange}")
+
+Legacy Usage (Still Supported):
+    cache = TickCache()
+    
+    # Update ticker with dictionary
     await cache.update_ticker("BTC/USDT", "binance", {
-        "bid": 50000.0,
+        "price": 50000.0,
+        "bid": 49999.0,
         "ask": 50001.0,
         "last": 50000.5,
-        "volume": 1234.56
+        "volume": 1234.56,
+        "time": "2023-01-01T00:00:00Z"
     })
     
     # Get price
@@ -377,6 +436,27 @@ Example:
     
     # Get from any exchange  
     any_price = await cache.get_ticker_any("BTC/USDT")
+    
+    # Get ticker as tuple
+    price, timestamp = await cache.get_ticker("BTC/USDT", "binance")
+
+fullon_orm.Tick Model Properties:
+    symbol: str          # Trading pair (e.g., "BTC/USDT")
+    exchange: str        # Exchange name (e.g., "binance")
+    price: float         # Current price
+    volume: float        # Volume at this price level
+    time: float          # Unix timestamp
+    bid: Optional[float] # Bid price
+    ask: Optional[float] # Ask price
+    last: Optional[float] # Last traded price
+    
+    # Computed properties:
+    spread: float        # ask - bid (if both available)
+    spread_percentage: float # spread / mid_price * 100 (if both available)
+    
+    # Methods:
+    to_dict() -> dict    # Convert to dictionary
+    from_dict(data: dict) -> Tick  # Create from dictionary (class method)
 """
 
 ACCOUNT_CACHE = """
