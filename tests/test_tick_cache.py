@@ -28,7 +28,7 @@ class TestTickCache:
         """Test TickCache initialization."""
         cache = TickCache()
         assert cache._cache is not None
-        await cache.close()
+        await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_update_and_get_ticker(self, clean_redis):
@@ -50,7 +50,7 @@ class TestTickCache:
             assert retrieved_tick.volume == 1234.56
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_ticker_not_found(self, clean_redis):
@@ -63,7 +63,7 @@ class TestTickCache:
             assert result is None
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_price_with_exchange(self, clean_redis):
@@ -80,7 +80,7 @@ class TestTickCache:
             assert result == 50000.0
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_price_not_found(self, clean_redis):
@@ -93,7 +93,7 @@ class TestTickCache:
             assert result == 0
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_price_without_exchange(self, clean_redis):
@@ -106,7 +106,7 @@ class TestTickCache:
             assert result == 0
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_del_exchange_ticker(self, clean_redis):
@@ -133,7 +133,7 @@ class TestTickCache:
             assert await cache.get_ticker("ETH/USDT", "binance") is None
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_ticker_any(self, clean_redis):
@@ -154,7 +154,7 @@ class TestTickCache:
             assert result == 0
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_price_tick(self, clean_redis):
@@ -177,7 +177,7 @@ class TestTickCache:
             assert result is None
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_tickers(self, clean_redis):
@@ -201,7 +201,7 @@ class TestTickCache:
             assert "ETH/USDT" in symbols
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_multiple_exchanges(self, clean_redis):
@@ -223,7 +223,7 @@ class TestTickCache:
             assert kraken_price == 50100.0
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_tick_properties(self, clean_redis):
@@ -249,7 +249,7 @@ class TestTickCache:
                 assert retrieved_tick.spread == 2.0  # ask - bid
                 
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_timestamp_handling(self, clean_redis):
@@ -269,7 +269,7 @@ class TestTickCache:
             assert retrieved_tick.time == 1672531200.0
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_overwrite_ticker(self, clean_redis):
@@ -294,4 +294,4 @@ class TestTickCache:
             assert result == 51000.0
             
         finally:
-            await cache.close()
+            await cache._cache.close()

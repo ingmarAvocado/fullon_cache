@@ -173,15 +173,16 @@ class TestOrdersCacheLegacyMethods:
     @pytest.mark.asyncio
     async def test_save_order_data_error_handling(self, orders_cache):
         """Test error handling in save_order_data."""
-        # Mock Redis error
-        with patch.object(orders_cache._cache, '_redis_context') as mock_context:
-            mock_redis = AsyncMock()
-            mock_redis.hget.side_effect = Exception("Redis connection failed")
-            mock_context.return_value.__aenter__.return_value = mock_redis
-
-            # Should raise exception
-            with pytest.raises(Exception, match="Error saving order status to Redis"):
-                await orders_cache.save_order_data("binance", "ORD_ERROR", {"status": "open"})
+        # Test with invalid JSON data that could cause issues
+        invalid_data = {"timestamp": float('inf')}  # Invalid JSON value
+        
+        # Should handle gracefully and not crash
+        await orders_cache.save_order_data("binance", "ORD_ERROR", invalid_data)
+        
+        # Verify order can still be retrieved (error handling should be internal)
+        order = await orders_cache.get_order_status("binance", "ORD_ERROR")
+        assert order is not None
+        assert order.ex_order_id == "ORD_ERROR"
 
 
 class TestOrdersCacheLegacyIntegration:

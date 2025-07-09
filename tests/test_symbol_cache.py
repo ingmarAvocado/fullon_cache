@@ -51,7 +51,7 @@ class TestSymbolCache:
         """Test SymbolCache initialization."""
         cache = SymbolCache()
         assert cache._cache is not None
-        await cache.close()
+        await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_context_manager(self, clean_redis):
@@ -68,7 +68,7 @@ class TestSymbolCache:
             result = cache._get_exchange_name_from_cat_ex_id("some_id")
             assert result is None
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_symbols_from_cache(self, clean_redis):
@@ -101,7 +101,7 @@ class TestSymbolCache:
             assert "ADA/USDT" in symbol_names
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_symbols_cache_miss(self, clean_redis):
@@ -116,7 +116,7 @@ class TestSymbolCache:
             assert result == []
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_symbols_json_decode_error(self, clean_redis):
@@ -141,7 +141,7 @@ class TestSymbolCache:
             assert result[0].symbol == "ETH/USDT"
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_symbols_by_ex_id_from_cache(self, clean_redis):
@@ -166,7 +166,7 @@ class TestSymbolCache:
             assert len(result) == 2
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_symbols_by_ex_id_cache_miss(self, clean_redis):
@@ -181,7 +181,7 @@ class TestSymbolCache:
             assert result == []
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_symbol_success(self, clean_redis):
@@ -206,7 +206,7 @@ class TestSymbolCache:
             assert result.quote == "USDT"
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_symbol_not_found(self, clean_redis):
@@ -222,7 +222,7 @@ class TestSymbolCache:
             assert result is None
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_symbol_no_exchange_name(self, clean_redis):
@@ -236,7 +236,7 @@ class TestSymbolCache:
             assert result is None
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_symbol_with_cat_ex_id(self, clean_redis):
@@ -251,7 +251,7 @@ class TestSymbolCache:
             assert result is None  # Because _get_exchange_name_from_cat_ex_id returns None
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_get_symbol_json_decode_error(self, clean_redis):
@@ -271,7 +271,7 @@ class TestSymbolCache:
             assert result is None
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_delete_symbol_success(self, clean_redis):
@@ -308,7 +308,7 @@ class TestSymbolCache:
                 assert not tickers_exists
                 
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_delete_symbol_no_exchange_name(self, clean_redis):
@@ -322,7 +322,7 @@ class TestSymbolCache:
             await cache.delete_symbol(symbol_name)
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_delete_symbol_cache_not_exists(self, clean_redis):
@@ -337,7 +337,7 @@ class TestSymbolCache:
             await cache.delete_symbol(symbol_name, exchange_name=exchange_name)
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_multiple_symbols_workflow(self, clean_redis):
@@ -381,7 +381,7 @@ class TestSymbolCache:
             assert deleted_symbol is None
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_symbol_model_properties(self, clean_redis):
@@ -409,7 +409,7 @@ class TestSymbolCache:
             assert retrieved.tick_size == 0.01
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_exchange_specific_symbols(self, clean_redis):
@@ -452,7 +452,7 @@ class TestSymbolCache:
             assert "ETH/EUR" in kraken_pairs
             
         finally:
-            await cache.close()
+            await cache._cache.close()
 
     @pytest.mark.asyncio
     async def test_symbol_serialization(self, clean_redis):
@@ -480,4 +480,4 @@ class TestSymbolCache:
             assert retrieved.description == original_symbol.description
             
         finally:
-            await cache.close()
+            await cache._cache.close()
