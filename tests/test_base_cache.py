@@ -43,18 +43,6 @@ class TestBaseCacheConnection:
         """Test Redis connection ping."""
         assert await base_cache.ping() is True
 
-    @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Connection pool singleton makes it hard to test connection errors")
-    async def test_ping_connection_error(self, monkeypatch):
-        """Test ping with connection error."""
-        # Create cache with invalid port
-        monkeypatch.setenv("REDIS_PORT", "99999")
-        cache = BaseCache()
-
-        with pytest.raises(ConnectionError) as exc_info:
-            await cache.ping()
-        assert "Redis ping failed" in str(exc_info.value)
-
 
 class TestBaseCacheBasicOperations:
     """Test basic cache operations."""

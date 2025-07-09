@@ -1,10 +1,173 @@
-"""Tests for ExchangeCache WebSocket error management."""
+"""Tests for ExchangeCache with fullon_orm integration."""
 
 import asyncio
+import json
 
 import pytest
 
 from fullon_cache import ExchangeCache
+
+
+class TestExchangeCacheORM:
+    """Test ORM-based exchange management."""
+
+    @pytest.mark.asyncio
+    async def test_get_exchange_from_cache(self, clean_redis):
+        """Test getting exchange from cache."""
+        cache = ExchangeCache()
+        ex_id = 123
+        
+        # Create real exchange data
+        exchange_data = {
+            "ex_id": ex_id,
+            "uid": 456,
+            "cat_ex_id": 1,
+            "name": "Test Exchange",
+            "test": False,
+            "active": True
+        }
+        
+        # Manually cache the exchange
+        redis_key = f"exchange:{ex_id}"
+        await cache._cache.set(redis_key, json.dumps(exchange_data), ttl=3600)
+        
+        # Get from cache
+        exchange = await cache.get_exchange(ex_id)
+        assert exchange is not None
+        assert exchange.ex_id == ex_id
+        assert exchange.name == "Test Exchange"
+        assert exchange.uid == 456
+
+    @pytest.mark.asyncio
+    async def test_get_exchange_not_found(self, clean_redis):
+        """Test getting non-existent exchange."""
+        cache = ExchangeCache()
+        ex_id = 999
+        
+        # This will try to fetch from database and return None
+        exchange = await cache.get_exchange(ex_id)
+        assert exchange is None
+
+    @pytest.mark.asyncio
+    async def test_cache_invalidation(self, clean_redis):
+        """Test cache invalidation functionality."""
+        cache = ExchangeCache()
+        
+        # Set up some cached data
+        await cache._cache.set("exchange:123", "test_data")
+        await cache._cache.set("user_exchanges:456", "test_data")
+        await cache._cache.set("cat_exchanges:binance:True", "test_data")
+        
+        # Verify data exists
+        assert await cache._cache.get("exchange:123") is not None
+        assert await cache._cache.get("user_exchanges:456") is not None
+        assert await cache._cache.get("cat_exchanges:binance:True") is not None
+        
+        # Invalidate specific exchange
+        await cache.invalidate_cache(ex_id=123)
+        assert await cache._cache.get("exchange:123") is None
+        
+        # Other data should still exist
+        assert await cache._cache.get("user_exchanges:456") is not None
+        assert await cache._cache.get("cat_exchanges:binance:True") is not None
+        
+        # Invalidate user exchanges
+        await cache.invalidate_cache(user_id=456)
+        assert await cache._cache.get("user_exchanges:456") is None
+        
+        # Cat exchanges should still be there
+        assert await cache._cache.get("cat_exchanges:binance:True") is not None
+        
+        # Invalidate everything (this will remove cat_exchanges)
+        await cache.invalidate_cache()
+        assert await cache._cache.get("cat_exchanges:binance:True") is None
+
+    @pytest.mark.asyncio
+    async def test_cache_ttl(self, clean_redis):
+        """Test that cache entries have proper TTL."""
+        cache = ExchangeCache()
+        
+        # Test setting data with TTL
+        await cache._cache.set("test_key", "test_value", ttl=3600)
+        
+        # Check that the key exists
+        exists = await cache._cache.exists("test_key")
+        assert exists == 1
+        
+        # The key should still exist after a short time
+        cached_value = await cache._cache.get("test_key")
+        assert cached_value == "test_value"
+
+    @pytest.mark.asyncio
+    async def test_exchange_model_creation(self, clean_redis):
+        """Test creating Exchange models from dict data."""
+        from fullon_orm.models import Exchange
+        
+        # Create an Exchange model from dictionary
+        exchange_data = {
+            "ex_id": 123,
+            "uid": 456,
+            "cat_ex_id": 1,
+            "name": "Test Exchange",
+            "test": False,
+            "active": True
+        }
+        
+        exchange = Exchange.from_dict(exchange_data)
+        assert exchange.ex_id == 123
+        assert exchange.uid == 456
+        assert exchange.name == "Test Exchange"
+        assert exchange.test is False
+        assert exchange.active is True
+
+    @pytest.mark.asyncio
+    async def test_cat_exchange_model_creation(self, clean_redis):
+        """Test creating CatExchange models from dict data."""
+        from fullon_orm.models import CatExchange
+        
+        # Create a CatExchange model from dictionary
+        cat_exchange_data = {
+            "cat_ex_id": 1,
+            "name": "binance",
+            "ohlcv_view": ""
+        }
+        
+        cat_exchange = CatExchange.from_dict(cat_exchange_data)
+        assert cat_exchange.cat_ex_id == 1
+        assert cat_exchange.name == "binance"
+        assert cat_exchange.ohlcv_view == ""
+
+    @pytest.mark.asyncio
+    async def test_cache_json_serialization(self, clean_redis):
+        """Test JSON serialization and deserialization of models."""
+        cache = ExchangeCache()
+        
+        from fullon_orm.models import Exchange
+        
+        # Create an Exchange model
+        exchange = Exchange(
+            ex_id=123,
+            uid=456,
+            cat_ex_id=1,
+            name="Test Exchange",
+            test=False,
+            active=True
+        )
+        
+        # Serialize to JSON and cache
+        exchange_json = json.dumps(exchange.to_dict())
+        await cache._cache.set("test_exchange", exchange_json, ttl=3600)
+        
+        # Retrieve and deserialize
+        cached_json = await cache._cache.get("test_exchange")
+        assert cached_json is not None
+        
+        cached_dict = json.loads(cached_json)
+        cached_exchange = Exchange.from_dict(cached_dict)
+        
+        assert cached_exchange.ex_id == 123
+        assert cached_exchange.name == "Test Exchange"
+        assert cached_exchange.uid == 456
 
 
 class TestExchangeCacheWebSocketErrors:

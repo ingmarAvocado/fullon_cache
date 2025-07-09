@@ -55,13 +55,13 @@ class TickCache:
             The price of the symbol, or 0 if not found
         """
         try:
-            tick = await self.get_price_tick_orm(symbol, exchange)
+            tick = await self.get_price_tick(symbol, exchange)
             return tick.price if tick else 0.0
         except Exception as e:
             logger.error(f"Error getting price for {symbol}: {e}")
             return 0
 
-    async def update_ticker_orm(self, exchange: str, ticker: Tick) -> bool:
+    async def update_ticker(self, exchange: str, ticker: Tick) -> bool:
         """Update ticker using fullon_orm.Tick model.
         
         Args:
@@ -130,29 +130,6 @@ class TickCache:
             logger.error(f"Error in get_next_ticker: {e}")
             return (0, None)
 
-    async def update_ticker(self, symbol: str, exchange: str, data: dict[str, Any]) -> int:
-        """Update the ticker data for a symbol on a specific exchange and notify subscribers.
-
-        Args:
-            symbol: The trading symbol to update the ticker for
-            exchange: The exchange to update the ticker on
-            data: The new ticker data
-
-        Returns:
-            1 if the ticker was updated successfully, 0 otherwise
-        """
-        try:
-            # Store ticker data in Redis hash
-            await self._cache.hset(f"tickers:{exchange}", symbol, json.dumps(data))
-
-            # Publish message to subscribers
-            channel = f'next_ticker:{exchange}:{symbol}'
-            await self._cache.publish(channel, json.dumps(data))
-
-            return 1
-        except Exception as e:
-            logger.error(f"Can't save ticker {symbol}:{data} - {str(e)}")
-            return 0
 
     async def get_ticker_any(self, symbol: str) -> float:
         """Gets ticker from any exchange given the symbol.
@@ -183,7 +160,7 @@ class TickCache:
             logger.error(f"Error in get_ticker_any: {e}")
             return 0
 
-    async def get_ticker_orm(self, symbol: str, exchange: str) -> Tick | None:
+    async def get_ticker(self, symbol: str, exchange: str) -> Tick | None:
         """Get ticker as fullon_orm.Tick model.
         
         Args:
@@ -220,41 +197,8 @@ class TickCache:
             logger.error(f"Failed to get ticker: {e}")
             return None
 
-    async def get_ticker(self, symbol: str, exchange: str | None = None) -> tuple[float | None, str | None]:
-        """Gets ticker from the database for a symbol, optionally from a specific exchange.
 
-        Args:
-            symbol: The symbol to look for (e.g. BTC/USD)
-            exchange: The exchange name. If None, will return first matching ticker from any exchange.
-
-        Returns:
-            tuple: A tuple containing the ticker price (float) and timestamp (str), or (0, None) if not found.
-        """
-        try:
-            if exchange:
-                ticker_data = await self._cache.hget(f"tickers:{exchange}", symbol)
-                if ticker_data:
-                    ticker = json.loads(ticker_data)
-                    return (float(ticker['price']), ticker['time'])
-            else:
-                # Search across all exchanges
-                from fullon_orm import get_async_session
-                async with get_async_session() as session:
-                    exchange_repo = ExchangeRepository(session)
-                    exchanges = await exchange_repo.get_cat_exchanges(all=True)
-
-                for exchange_obj in exchanges:
-                    ticker_data = await self._cache.hget(f"tickers:{exchange_obj.name}", symbol)
-                    if ticker_data:
-                        ticker = json.loads(ticker_data)
-                        return (float(ticker['price']), ticker['time'])
-
-            return (0, None)
-        except (TypeError, json.JSONDecodeError, Exception) as e:
-            logger.error(f"Error getting ticker {symbol}: {e}")
-            return (0, None)
-
-    async def get_price_tick_orm(self, symbol: str, exchange: str | None = None) -> Tick | None:
+    async def get_price_tick(self, symbol: str, exchange: str | None = None) -> Tick | None:
         """Get full tick data (not just price).
         
         Args:
@@ -265,7 +209,7 @@ class TickCache:
             fullon_orm.Tick model or None if not found
         """
         if exchange:
-            return await self.get_ticker_orm(symbol, exchange)
+            return await self.get_ticker(symbol, exchange)
         else:
             # Try to find on any exchange
             try:
@@ -275,7 +219,7 @@ class TickCache:
                     exchanges = await exchange_repo.get_cat_exchanges(all=True)
 
                 for exchange_obj in exchanges:
-                    tick = await self.get_ticker_orm(symbol, exchange_obj.name)
+                    tick = await self.get_ticker(symbol, exchange_obj.name)
                     if tick:
                         return tick
                 return None
@@ -377,7 +321,7 @@ class TickCache:
             else:
                 return tuple(sizes)
 
-            tick = await self.get_ticker_orm(symbol, exchange)
+            tick = await self.get_ticker(symbol, exchange)
             if not tick:
                 return 0, 0, 0
 
@@ -403,54 +347,3 @@ class TickCache:
             logger.error(f"Error in round_down for {symbol}: {e}")
             return 0, 0, 0
 
-    # Legacy methods for backward compatibility
-    async def update_ticker_legacy(self, symbol: str, exchange: str, data: dict[str, Any]) -> int:
-        """Legacy method - use update_ticker() instead."""
-        try:
-            # Convert dict to Tick model
-            tick_data = {
-                "symbol": symbol,
-                "exchange": exchange,
-                **data
-            }
-            # Ensure required fields exist
-            if "time" not in tick_data:
-                tick_data["time"] = 0.0
-            if "volume" not in tick_data:
-                tick_data["volume"] = 0.0
-            
-            tick = Tick.from_dict(tick_data)
-            
-            success = await self.update_ticker_orm(exchange, tick)
-            return 1 if success else 0
-        except Exception:
-            return 0
-
-    async def get_ticker_legacy(self, symbol: str, exchange: str | None = None) -> tuple[float | None, str | None]:
-        """Legacy method - use get_ticker() instead."""
-        try:
-            if exchange:
-                tick = await self.get_ticker_orm(symbol, exchange)
-                if tick:
-                    return (float(tick.price), str(tick.time))
-            else:
-                # Search across all exchanges
-                from fullon_orm import get_async_session
-                async with get_async_session() as session:
-                    exchange_repo = ExchangeRepository(session)
-                    exchanges = await exchange_repo.get_cat_exchanges(all=True)
-
-                for exchange_obj in exchanges:
-                    tick = await self.get_ticker_orm(symbol, exchange_obj.name)
-                    if tick:
-                        return (float(tick.price), str(tick.time))
-
-            return (0, None)
-        except Exception as e:
-            logger.error(f"Error getting ticker {symbol}: {e}")
-            return (0, None)
-
-    async def get_price_legacy(self, symbol: str, exchange: str | None = None) -> float:
-        """Legacy method - use get_price_tick() instead."""
-        tick = await self.get_price_tick_orm(symbol, exchange)
-        return tick.price if tick else 0.0

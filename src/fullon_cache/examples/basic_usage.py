@@ -27,9 +27,6 @@ async def ticker_operations():
     tick_cache = TickCache()
     
     try:
-        # === NEW ORM-BASED METHODS (RECOMMENDED) ===
-        print("\\n--- Using ORM-based methods ---")
-        
         # Import fullon_orm Tick model
         from fullon_orm.models import Tick
         import time
@@ -46,43 +43,24 @@ async def ticker_operations():
             last=50000.5
         )
         
-        print(f"Storing ticker (ORM): BTC/USDT @ ${tick.price}")
-        success = await tick_cache.update_ticker_orm("binance", tick)
+        print(f"Storing ticker: BTC/USDT @ ${tick.price}")
+        success = await tick_cache.update_ticker("binance", tick)
         print(f"Update successful: {success}")
         
         # Get ticker as ORM model
-        ticker = await tick_cache.get_ticker_orm("BTC/USDT", "binance")
+        ticker = await tick_cache.get_ticker("BTC/USDT", "binance")
         if ticker:
-            print(f"Retrieved ticker (ORM): ${ticker.price}, Volume: {ticker.volume}")
+            print(f"Retrieved ticker: ${ticker.price}, Volume: {ticker.volume}")
             print(f"Spread: ${ticker.spread:.2f}, Spread %: {ticker.spread_percentage:.4f}%")
         
         # Get price tick from any exchange
-        price_tick = await tick_cache.get_price_tick_orm("BTC/USDT")
+        price_tick = await tick_cache.get_price_tick("BTC/USDT")
         if price_tick:
-            print(f"Best price (ORM): ${price_tick.price} on {price_tick.exchange}")
-        
-        # === LEGACY METHODS (STILL SUPPORTED) ===
-        print("\\n--- Using legacy methods ---")
-        
-        # Update ticker data (legacy)
-        ticker_data = {
-            "bid": 50000.0,
-            "ask": 50001.0,
-            "last": 50000.5,
-            "volume": 1234.56,
-            "time": datetime.now(timezone.utc).isoformat()
-        }
-        
-        print(f"Storing ticker (legacy): BTC/USDT @ ${ticker_data['last']}")
-        await tick_cache.update_ticker("BTC/USDT", "binance", ticker_data)
-        
-        # Get ticker price and timestamp
-        price, timestamp = await tick_cache.get_ticker("BTC/USDT", "binance")
-        print(f"Retrieved price (legacy): ${price} at {timestamp}")
+            print(f"Best price: ${price_tick.price} on {price_tick.exchange}")
         
         # Get price from any exchange
         any_price = await tick_cache.get_ticker_any("BTC/USDT")
-        print(f"Price from any exchange (legacy): ${any_price}")
+        print(f"Price from any exchange: ${any_price}")
         
         # Get all tickers for an exchange
         tickers = await tick_cache.get_tickers("binance")
@@ -99,9 +77,6 @@ async def order_operations():
     orders_cache = OrdersCache()
     
     try:
-        # === NEW ORM-BASED METHODS (RECOMMENDED) ===
-        print("\\n--- Using ORM-based methods ---")
-        
         # Import fullon_orm Order model
         from fullon_orm.models import Order
         from datetime import datetime, timezone
@@ -122,14 +97,14 @@ async def order_operations():
             timestamp=datetime.now(timezone.utc)
         )
         
-        print(f"Saving order (ORM): {order.symbol} {order.side} {order.volume}")
+        print(f"Saving order: {order.symbol} {order.side} {order.volume}")
         success = await orders_cache.save_order("binance", order)
         print(f"Save successful: {success}")
         
         # Get order as ORM model
         retrieved_order = await orders_cache.get_order("binance", "EX_12345")
         if retrieved_order:
-            print(f"Retrieved order (ORM): {retrieved_order.symbol} - Status: {retrieved_order.status}")
+            print(f"Retrieved order: {retrieved_order.symbol} - Status: {retrieved_order.status}")
         
         # Update order with partial data
         update_order = Order(
@@ -145,10 +120,7 @@ async def order_operations():
         # Get updated order
         final_order = await orders_cache.get_order("binance", "EX_12345")
         if final_order:
-            print(f"Final order (ORM): Status={final_order.status}, Final Volume={final_order.final_volume}")
-        
-        # === LEGACY METHODS (STILL SUPPORTED) ===
-        print("\\n--- Using legacy methods ---")
+            print(f"Final order: Status={final_order.status}, Final Volume={final_order.final_volume}")
         
         # Push order to queue
         await orders_cache.push_open_order("order123", "local456")
@@ -163,12 +135,12 @@ async def order_operations():
             "status": "pending"
         }
         await orders_cache.save_order_data("binance", "order123", order_data)
-        print(f"Saved order data (legacy): {order_data}")
+        print(f"Saved order data: {order_data}")
         
         # Get order status
         order = await orders_cache.get_order_status("binance", "order123")
         if order:
-            print(f"Order found (legacy): {order.symbol} - Status: {order.status}")
+            print(f"Order found: {order.symbol} - Status: {order.status}")
         
         # Pop order from queue
         popped_id = await orders_cache.pop_open_order("local456")

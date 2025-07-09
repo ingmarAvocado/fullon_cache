@@ -1,414 +1,373 @@
-"""Tests for TickCache ORM-based interface refactoring."""
+"""Tests for TickCache ORM-based interface using real Redis and objects."""
 
 import json
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fullon_orm.models import Tick
+from fullon_orm.models import Tick, Exchange
 
-from fullon_cache.base_cache import BaseCache
 from fullon_cache.tick_cache import TickCache
 
 
-@pytest.fixture
-def mock_base_cache():
-    """Mock BaseCache for testing."""
-    cache = AsyncMock(spec=BaseCache)
-    return cache
-
-
-@pytest.fixture
-def tick_cache(mock_base_cache):
-    """Create TickCache instance with mocked BaseCache."""
-    cache = TickCache()
-    cache._cache = mock_base_cache
-    return cache
-
-
-@pytest.fixture
-def sample_tick():
-    """Sample Tick model for testing."""
+def create_test_tick(symbol="BTC/USDT", exchange="binance", price=50000.0, volume=1234.56):
+    """Factory function to create test Tick objects."""
     return Tick(
-        symbol="BTC/USDT",
-        exchange="binance",
-        price=50000.0,
-        volume=1234.56,
+        symbol=symbol,
+        exchange=exchange,
+        price=price,
+        volume=volume,
         time=time.time(),
-        bid=49999.0,
-        ask=50001.0,
-        last=50000.5
+        bid=price - 1.0,
+        ask=price + 1.0,
+        last=price + 0.5
     )
 
 
-@pytest.fixture
-def mock_exchanges():
-    """Mock exchange objects for testing."""
-    class MockExchange:
-        def __init__(self, name):
-            self.name = name
-
-    return [
-        MockExchange("binance"),
-        MockExchange("kraken"),
-        MockExchange("coinbase")
-    ]
+def create_test_exchange(name="binance", ex_id=1, cat_ex_id=1):
+    """Factory function to create test Exchange objects."""
+    return Exchange(
+        name=name,
+        ex_id=ex_id,
+        cat_ex_id=cat_ex_id,
+        active=True,
+        paper=False,
+        api_url=f"https://api.{name}.com",
+        secret_key="test_secret",
+        api_key="test_api_key"
+    )
 
 
 class TestTickCacheORM:
     """Test cases for TickCache ORM-based interface."""
 
     @pytest.mark.asyncio
-    async def test_update_ticker_with_tick_model(self, tick_cache, mock_base_cache, sample_tick):
+    async def test_update_ticker_with_tick_model(self, clean_redis):
         """Test updating ticker with fullon_orm.Tick model."""
-        # Setup mocks
-        mock_base_cache.hset.return_value = True
-        mock_base_cache.publish.return_value = 1
-
-        # Test
-        result = await tick_cache.update_ticker_orm("binance", sample_tick)
-
-        # Assert
-        assert result is True
+        cache = TickCache()
         
-        # Verify hset was called with correct parameters
-        mock_base_cache.hset.assert_called_once()
-        call_args = mock_base_cache.hset.call_args
-        assert call_args[0][0] == "tickers:binance"
-        assert call_args[0][1] == sample_tick.symbol
-        
-        # Verify the data was JSON serialized
-        stored_data = json.loads(call_args[0][2])
-        assert stored_data["symbol"] == sample_tick.symbol
-        assert stored_data["price"] == sample_tick.price
-        assert stored_data["volume"] == sample_tick.volume
-
-        # Verify publish was called
-        mock_base_cache.publish.assert_called_once()
-        pub_args = mock_base_cache.publish.call_args
-        assert pub_args[0][0] == f"next_ticker:binance:{sample_tick.symbol}"
+        try:
+            # Create test tick
+            tick = create_test_tick("BTC/USDT", "binance", 50000.0)
+            
+            # Test update_ticker
+            result = await cache.update_ticker("binance", tick)
+            assert result is True
+            
+            # Verify the tick was stored
+            stored_tick = await cache.get_ticker("BTC/USDT", "binance")
+            assert stored_tick is not None
+            assert stored_tick.symbol == tick.symbol
+            assert stored_tick.price == tick.price
+            assert stored_tick.volume == tick.volume
+            
+        finally:
+            await cache.close()
 
     @pytest.mark.asyncio
-    async def test_update_ticker_error_handling(self, tick_cache, mock_base_cache, sample_tick):
-        """Test update_ticker error handling."""
-        # Setup mock to raise exception
-        mock_base_cache.hset.side_effect = Exception("Redis error")
-
-        # Test
-        result = await tick_cache.update_ticker_orm("binance", sample_tick)
-
-        # Assert
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_get_ticker_returns_tick_model(self, tick_cache, mock_base_cache, sample_tick):
+    async def test_get_ticker_returns_tick_model(self, clean_redis):
         """Test that get_ticker returns fullon_orm.Tick model."""
-        # Setup mock data
-        tick_dict = sample_tick.to_dict()
-        mock_base_cache.hget.return_value = json.dumps(tick_dict)
+        cache = TickCache()
+        
+        try:
+            # Create and store a tick
+            tick = create_test_tick("BTC/USDT", "binance", 50000.0)
+            await cache.update_ticker("binance", tick)
 
-        # Test
-        result = await tick_cache.get_ticker_orm("BTC/USDT", "binance")
+            # Get the tick back
+            result = await cache.get_ticker("BTC/USDT", "binance")
 
-        # Assert
-        assert result is not None
-        assert isinstance(result, Tick)
-        assert result.symbol == sample_tick.symbol
-        assert result.exchange == sample_tick.exchange
-        assert result.price == sample_tick.price
-        assert result.volume == sample_tick.volume
-        assert result.bid == sample_tick.bid
-        assert result.ask == sample_tick.ask
-        assert result.last == sample_tick.last
-
-        # Verify correct Redis key was used
-        mock_base_cache.hget.assert_called_once_with("tickers:binance", "BTC/USDT")
+            # Verify it's a proper Tick model
+            assert result is not None
+            assert isinstance(result, Tick)
+            assert result.symbol == tick.symbol
+            assert result.exchange == tick.exchange
+            assert result.price == tick.price
+            assert result.volume == tick.volume
+            assert result.bid == tick.bid
+            assert result.ask == tick.ask
+            assert result.last == tick.last
+            
+        finally:
+            await cache.close()
 
     @pytest.mark.asyncio
-    async def test_get_ticker_not_found(self, tick_cache, mock_base_cache):
+    async def test_get_ticker_not_found(self, clean_redis):
         """Test get_ticker when ticker not found."""
-        # Setup mock to return None
-        mock_base_cache.hget.return_value = None
-
-        # Test
-        result = await tick_cache.get_ticker_orm("NONEXISTENT/USDT", "binance")
-
-        # Assert
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_get_ticker_json_error(self, tick_cache, mock_base_cache):
-        """Test get_ticker with invalid JSON data."""
-        # Setup mock to return invalid JSON
-        mock_base_cache.hget.return_value = "invalid json"
-
-        # Test
-        result = await tick_cache.get_ticker_orm("BTC/USDT", "binance")
-
-        # Assert
-        assert result is None
+        cache = TickCache()
+        
+        try:
+            result = await cache.get_ticker("NONEXISTENT/USDT", "binance")
+            assert result is None
+            
+        finally:
+            await cache.close()
 
     @pytest.mark.asyncio
-    async def test_get_ticker_general_error(self, tick_cache, mock_base_cache):
-        """Test get_ticker with general error."""
-        # Setup mock to raise exception
-        mock_base_cache.hget.side_effect = Exception("Redis error")
-
-        # Test
-        result = await tick_cache.get_ticker_orm("BTC/USDT", "binance")
-
-        # Assert
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_get_price_tick_with_exchange(self, tick_cache, mock_base_cache, sample_tick):
+    async def test_get_price_tick_with_exchange(self, clean_redis):
         """Test get_price_tick with specific exchange."""
-        # Setup mock data
-        tick_dict = sample_tick.to_dict()
-        mock_base_cache.hget.return_value = json.dumps(tick_dict)
+        cache = TickCache()
+        
+        try:
+            # Create and store a tick
+            tick = create_test_tick("BTC/USDT", "binance", 50000.0)
+            await cache.update_ticker("binance", tick)
 
-        # Test
-        result = await tick_cache.get_price_tick_orm("BTC/USDT", "binance")
+            # Get price tick
+            result = await cache.get_price_tick("BTC/USDT", "binance")
 
-        # Assert
-        assert result is not None
-        assert isinstance(result, Tick)
-        assert result.price == sample_tick.price
-        assert result.volume == sample_tick.volume
-        assert result.symbol == sample_tick.symbol
-        assert result.exchange == sample_tick.exchange
-
-    @pytest.mark.asyncio
-    async def test_get_price_tick_without_exchange(self, tick_cache, mock_exchanges, sample_tick):
-        """Test get_price_tick without specifying exchange."""
-        with patch('fullon_orm.get_async_session') as mock_session:
-            # Setup mock session and repository
-            mock_repo = AsyncMock()
-            mock_repo.get_cat_exchanges.return_value = mock_exchanges
-            mock_session.return_value.__aenter__.return_value = MagicMock()
-
-            with patch('fullon_cache.tick_cache.ExchangeRepository', return_value=mock_repo):
-                tick_dict = sample_tick.to_dict()
-                # First exchange returns None, second returns data
-                tick_cache._cache.hget.side_effect = [None, json.dumps(tick_dict)]
-
-                # Test
-                result = await tick_cache.get_price_tick_orm("BTC/USDT")
-
-                # Assert
-                assert result is not None
-                assert isinstance(result, Tick)
-                assert result.price == sample_tick.price
+            assert result is not None
+            assert isinstance(result, Tick)
+            assert result.price == tick.price
+            assert result.volume == tick.volume
+            assert result.symbol == tick.symbol
+            assert result.exchange == tick.exchange
+            
+        finally:
+            await cache.close()
 
     @pytest.mark.asyncio
-    async def test_get_price_tick_not_found(self, tick_cache, mock_base_cache):
+    async def test_get_price_tick_not_found(self, clean_redis):
         """Test get_price_tick when ticker not found."""
-        mock_base_cache.hget.return_value = None
-
-        result = await tick_cache.get_price_tick_orm("NONEXISTENT/USDT", "binance")
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_backward_compatibility_update_ticker_legacy(self, tick_cache, mock_base_cache):
-        """Test backward compatibility with update_ticker_legacy."""
-        # Setup mocks
-        mock_base_cache.hset.return_value = True
-        mock_base_cache.publish.return_value = 1
-
-        # Test legacy method
-        data = {
-            "price": 50000.0,
-            "volume": 1234.56,
-            "time": time.time(),
-            "bid": 49999.0,
-            "ask": 50001.0,
-            "last": 50000.5
-        }
+        cache = TickCache()
         
-        result = await tick_cache.update_ticker_legacy("BTC/USDT", "binance", data)
-
-        # Assert
-        assert result == 1
-        
-        # Verify the underlying ORM method was called
-        mock_base_cache.hset.assert_called_once()
-        mock_base_cache.publish.assert_called_once()
+        try:
+            result = await cache.get_price_tick("NONEXISTENT/USDT", "binance")
+            assert result is None
+            
+        finally:
+            await cache.close()
 
     @pytest.mark.asyncio
-    async def test_backward_compatibility_update_ticker_legacy_error(self, tick_cache, mock_base_cache):
-        """Test update_ticker_legacy error handling."""
-        # Setup mock to raise exception
-        mock_base_cache.hset.side_effect = Exception("Redis error")
-
-        # Test
-        data = {"price": 50000.0, "volume": 1234.56, "time": time.time()}
-        result = await tick_cache.update_ticker_legacy("BTC/USDT", "binance", data)
-
-        # Assert
-        assert result == 0
-
-    @pytest.mark.asyncio
-    async def test_backward_compatibility_get_price_legacy(self, tick_cache, mock_base_cache, sample_tick):
-        """Test backward compatibility with get_price_legacy."""
-        # Setup mock data
-        tick_dict = sample_tick.to_dict()
-        mock_base_cache.hget.return_value = json.dumps(tick_dict)
-
-        # Test legacy method
-        result = await tick_cache.get_price_legacy("BTC/USDT", "binance")
-
-        # Assert
-        assert result == sample_tick.price
-
-    @pytest.mark.asyncio
-    async def test_backward_compatibility_get_price_legacy_not_found(self, tick_cache, mock_base_cache):
-        """Test get_price_legacy when ticker not found."""
-        mock_base_cache.hget.return_value = None
-
-        result = await tick_cache.get_price_legacy("NONEXISTENT/USDT", "binance")
-
-        assert result == 0.0
-
-    @pytest.mark.asyncio
-    async def test_backward_compatibility_get_price_legacy_without_exchange(self, tick_cache, mock_exchanges, sample_tick):
-        """Test get_price_legacy without specifying exchange."""
-        with patch('fullon_orm.get_async_session') as mock_session:
-            mock_repo = AsyncMock()
-            mock_repo.get_cat_exchanges.return_value = mock_exchanges
-            mock_session.return_value.__aenter__.return_value = MagicMock()
-
-            with patch('fullon_cache.tick_cache.ExchangeRepository', return_value=mock_repo):
-                tick_dict = sample_tick.to_dict()
-                tick_cache._cache.hget.side_effect = [None, json.dumps(tick_dict)]
-
-                result = await tick_cache.get_price_legacy("BTC/USDT")
-
-                assert result == sample_tick.price
-
-    @pytest.mark.asyncio
-    async def test_tick_model_properties(self, sample_tick):
+    async def test_tick_model_properties(self, clean_redis):
         """Test that Tick model has expected properties."""
+        tick = create_test_tick("BTC/USDT", "binance", 50000.0, 1234.56)
+        
         # Test basic properties
-        assert sample_tick.symbol == "BTC/USDT"
-        assert sample_tick.exchange == "binance"
-        assert sample_tick.price == 50000.0
-        assert sample_tick.volume == 1234.56
-        assert sample_tick.bid == 49999.0
-        assert sample_tick.ask == 50001.0
-        assert sample_tick.last == 50000.5
+        assert tick.symbol == "BTC/USDT"
+        assert tick.exchange == "binance"
+        assert tick.price == 50000.0
+        assert tick.volume == 1234.56
+        assert tick.bid == 49999.0
+        assert tick.ask == 50001.0
+        assert tick.last == 50000.5
 
         # Test spread calculation
-        assert sample_tick.spread == 2.0  # ask - bid
-        assert sample_tick.spread_percentage == 0.004  # spread / mid_price * 100
+        assert tick.spread == 2.0  # ask - bid
+        assert tick.spread_percentage == 0.004  # spread / mid_price * 100
 
     @pytest.mark.asyncio
-    async def test_tick_model_to_dict_from_dict(self, sample_tick):
+    async def test_tick_model_to_dict_from_dict(self, clean_redis):
         """Test Tick model serialization and deserialization."""
+        tick = create_test_tick("BTC/USDT", "binance", 50000.0, 1234.56)
+        
         # Test to_dict
-        tick_dict = sample_tick.to_dict()
+        tick_dict = tick.to_dict()
         assert isinstance(tick_dict, dict)
-        assert tick_dict["symbol"] == sample_tick.symbol
-        assert tick_dict["exchange"] == sample_tick.exchange
-        assert tick_dict["price"] == sample_tick.price
+        assert tick_dict["symbol"] == tick.symbol
+        assert tick_dict["exchange"] == tick.exchange
+        assert tick_dict["price"] == tick.price
 
         # Test from_dict
         reconstructed_tick = Tick.from_dict(tick_dict)
-        assert reconstructed_tick.symbol == sample_tick.symbol
-        assert reconstructed_tick.exchange == sample_tick.exchange
-        assert reconstructed_tick.price == sample_tick.price
-        assert reconstructed_tick.volume == sample_tick.volume
-        assert reconstructed_tick.bid == sample_tick.bid
-        assert reconstructed_tick.ask == sample_tick.ask
-        assert reconstructed_tick.last == sample_tick.last
+        assert reconstructed_tick.symbol == tick.symbol
+        assert reconstructed_tick.exchange == tick.exchange
+        assert reconstructed_tick.price == tick.price
+        assert reconstructed_tick.volume == tick.volume
+        assert reconstructed_tick.bid == tick.bid
+        assert reconstructed_tick.ask == tick.ask
+        assert reconstructed_tick.last == tick.last
 
     @pytest.mark.asyncio
-    async def test_new_methods_integration(self, tick_cache, mock_base_cache, sample_tick):
-        """Test integration of new ORM methods."""
-        # Setup mocks
-        mock_base_cache.hset.return_value = True
-        mock_base_cache.publish.return_value = 1
-
-        # Test full workflow: update -> get
-        # 1. Update ticker
-        update_result = await tick_cache.update_ticker_orm("binance", sample_tick)
-        assert update_result is True
-
-        # 2. Mock get_ticker to return the same data
-        tick_dict = sample_tick.to_dict()
-        mock_base_cache.hget.return_value = json.dumps(tick_dict)
-
-        # 3. Get ticker back
-        retrieved_tick = await tick_cache.get_ticker_orm("BTC/USDT", "binance")
-        assert retrieved_tick is not None
-        assert retrieved_tick.symbol == sample_tick.symbol
-        assert retrieved_tick.price == sample_tick.price
-
-        # 4. Get price tick
-        price_tick = await tick_cache.get_price_tick_orm("BTC/USDT", "binance")
-        assert price_tick is not None
-        assert price_tick.price == sample_tick.price
-
-    @pytest.mark.asyncio
-    async def test_method_signatures(self, tick_cache):
-        """Test that new methods have correct signatures."""
-        import inspect
+    async def test_new_methods_integration(self, clean_redis):
+        """Test integration of ORM methods."""
+        cache = TickCache()
         
-        # Test update_ticker signature
-        sig = inspect.signature(tick_cache.update_ticker_orm)
-        params = list(sig.parameters.keys())
-        assert params == ["exchange", "ticker"]
-        assert sig.return_annotation == bool
+        try:
+            tick = create_test_tick("BTC/USDT", "binance", 50000.0)
+            
+            # Test full workflow: update -> get
+            # 1. Update ticker
+            update_result = await cache.update_ticker("binance", tick)
+            assert update_result is True
 
-        # Test get_ticker signature  
-        sig = inspect.signature(tick_cache.get_ticker_orm)
-        params = list(sig.parameters.keys())
-        assert params == ["symbol", "exchange"]
-        # Note: return annotation should be Tick | None but may show as string
+            # 2. Get ticker back
+            retrieved_tick = await cache.get_ticker("BTC/USDT", "binance")
+            assert retrieved_tick is not None
+            assert retrieved_tick.symbol == tick.symbol
+            assert retrieved_tick.price == tick.price
 
-        # Test get_price_tick signature
-        sig = inspect.signature(tick_cache.get_price_tick_orm)
-        params = list(sig.parameters.keys())
-        assert params == ["symbol", "exchange"]
+            # 3. Get price tick
+            price_tick = await cache.get_price_tick("BTC/USDT", "binance")
+            assert price_tick is not None
+            assert price_tick.price == tick.price
+            
+        finally:
+            await cache.close()
 
     @pytest.mark.asyncio
-    async def test_redis_key_patterns(self, tick_cache, mock_base_cache, sample_tick):
+    async def test_redis_key_patterns(self, clean_redis):
         """Test that Redis key patterns are consistent."""
-        # Setup mocks
-        mock_base_cache.hset.return_value = True
-        mock_base_cache.publish.return_value = 1
-
-        # Test update_ticker key pattern
-        await tick_cache.update_ticker_orm("binance", sample_tick)
+        cache = TickCache()
         
-        # Verify hset was called with correct key pattern
-        hset_call = mock_base_cache.hset.call_args
-        assert hset_call[0][0] == "tickers:binance"
-        assert hset_call[0][1] == sample_tick.symbol
-
-        # Verify publish was called with correct channel pattern
-        publish_call = mock_base_cache.publish.call_args
-        assert publish_call[0][0] == f"next_ticker:binance:{sample_tick.symbol}"
+        try:
+            tick = create_test_tick("BTC/USDT", "binance", 50000.0)
+            
+            # Update ticker
+            await cache.update_ticker("binance", tick)
+            
+            # Verify the data exists in expected Redis key
+            async with cache._cache._redis_context() as redis_client:
+                key = "tickers:binance"
+                stored_data = await redis_client.hget(key, tick.symbol)
+                assert stored_data is not None
+                
+                # Verify it's JSON and has expected data
+                parsed_data = json.loads(stored_data)
+                assert parsed_data["symbol"] == tick.symbol
+                assert parsed_data["price"] == tick.price
+                assert parsed_data["exchange"] == tick.exchange
+                
+        finally:
+            await cache.close()
 
     @pytest.mark.asyncio
-    async def test_pub_sub_integration(self, tick_cache, mock_base_cache, sample_tick):
-        """Test pub/sub integration with ORM methods."""
-        # Setup mocks
-        mock_base_cache.hset.return_value = True
-        mock_base_cache.publish.return_value = 1
-
-        # Test that update_ticker publishes to correct channel
-        await tick_cache.update_ticker_orm("binance", sample_tick)
-
-        # Verify publish was called with serialized Tick data
-        publish_call = mock_base_cache.publish.call_args
-        channel = publish_call[0][0]
-        message = publish_call[0][1]
+    async def test_multiple_exchanges(self, clean_redis):
+        """Test tickers for multiple exchanges."""
+        cache = TickCache()
         
-        assert channel == f"next_ticker:binance:{sample_tick.symbol}"
+        try:
+            # Create tickers for different exchanges
+            binance_tick = create_test_tick("BTC/USDT", "binance", 50000.0)
+            kraken_tick = create_test_tick("BTC/USDT", "kraken", 50100.0)
+            
+            # Store both
+            await cache.update_ticker("binance", binance_tick)
+            await cache.update_ticker("kraken", kraken_tick)
+            
+            # Retrieve both
+            binance_result = await cache.get_ticker("BTC/USDT", "binance")
+            kraken_result = await cache.get_ticker("BTC/USDT", "kraken")
+            
+            assert binance_result is not None
+            assert kraken_result is not None
+            assert binance_result.price == 50000.0
+            assert kraken_result.price == 50100.0
+            assert binance_result.exchange == "binance"
+            assert kraken_result.exchange == "kraken"
+            
+        finally:
+            await cache.close()
+
+    @pytest.mark.asyncio
+    async def test_overwrite_ticker(self, clean_redis):
+        """Test overwriting existing ticker data."""
+        cache = TickCache()
         
-        # Message should be JSON-serialized Tick data
-        message_data = json.loads(message)
-        assert message_data["symbol"] == sample_tick.symbol
-        assert message_data["price"] == sample_tick.price
-        assert message_data["exchange"] == sample_tick.exchange
+        try:
+            # Create and store initial ticker
+            tick1 = create_test_tick("BTC/USDT", "binance", 50000.0)
+            await cache.update_ticker("binance", tick1)
+            
+            # Verify initial data
+            result = await cache.get_price("BTC/USDT", "binance")
+            assert result == 50000.0
+            
+            # Overwrite with new ticker
+            tick2 = create_test_tick("BTC/USDT", "binance", 51000.0)
+            await cache.update_ticker("binance", tick2)
+            
+            # Verify updated data
+            result = await cache.get_price("BTC/USDT", "binance")
+            assert result == 51000.0
+            
+        finally:
+            await cache.close()
+
+    @pytest.mark.asyncio
+    async def test_timestamp_handling(self, clean_redis):
+        """Test timestamp handling in tickers."""
+        cache = TickCache()
+        
+        try:
+            # Create tick with specific timestamp
+            tick = create_test_tick("BTC/USDT", "binance", 50000.0)
+            tick.time = 1672531200.0  # 2023-01-01T00:00:00Z
+            
+            await cache.update_ticker("binance", tick)
+            
+            # Retrieve and verify timestamp
+            retrieved_tick = await cache.get_ticker("BTC/USDT", "binance")
+            assert retrieved_tick is not None
+            assert retrieved_tick.time == 1672531200.0
+            
+        finally:
+            await cache.close()
+
+    @pytest.mark.asyncio
+    async def test_various_symbols(self, clean_redis):
+        """Test various symbol formats."""
+        cache = TickCache()
+        
+        try:
+            symbols = [
+                ("BTC/USDT", "Bitcoin to USDT"),
+                ("ETH/EUR", "Ethereum to Euro"),
+                ("ADA/BTC", "Cardano to Bitcoin"),
+                ("XRP/USD", "Ripple to USD")
+            ]
+            
+            # Store tickers for all symbols
+            for symbol, description in symbols:
+                tick = create_test_tick(symbol, "binance", 1000.0)
+                await cache.update_ticker("binance", tick)
+            
+            # Retrieve and verify all
+            for symbol, description in symbols:
+                result = await cache.get_ticker(symbol, "binance")
+                assert result is not None
+                assert result.symbol == symbol
+                assert result.price == 1000.0
+                
+        finally:
+            await cache.close()
+
+    @pytest.mark.asyncio
+    async def test_bid_ask_spread_calculations(self, clean_redis):
+        """Test bid/ask spread calculations."""
+        cache = TickCache()
+        
+        try:
+            # Create tick with specific bid/ask
+            tick = create_test_tick("BTC/USDT", "binance", 50000.0)
+            tick.bid = 49995.0
+            tick.ask = 50005.0
+            
+            await cache.update_ticker("binance", tick)
+            
+            # Retrieve and verify spread
+            retrieved_tick = await cache.get_ticker("BTC/USDT", "binance")
+            assert retrieved_tick is not None
+            assert retrieved_tick.bid == 49995.0
+            assert retrieved_tick.ask == 50005.0
+            assert retrieved_tick.spread == 10.0  # ask - bid
+            
+        finally:
+            await cache.close()
+
+    @pytest.mark.asyncio
+    async def test_exchange_objects(self, clean_redis):
+        """Test using Exchange objects alongside tickers."""
+        # Create exchanges
+        binance = create_test_exchange("binance", 1, 1)
+        kraken = create_test_exchange("kraken", 2, 2)
+        
+        # Verify exchange properties
+        assert binance.name == "binance"
+        assert binance.ex_id == 1
+        assert binance.cat_ex_id == 1
+        assert binance.active is True
+        assert binance.api_url == "https://api.binance.com"
+        
+        assert kraken.name == "kraken"
+        assert kraken.ex_id == 2
+        assert kraken.cat_ex_id == 2

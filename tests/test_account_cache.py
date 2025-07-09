@@ -22,15 +22,19 @@ class TestAccountCacheCore:
     @pytest.mark.asyncio
     async def test_upsert_positions_basic(self, account_cache):
         """Test basic position upsert."""
-        positions = {
-            "BTC/USD": {
-                "cost": 50000.0,
-                "volume": 1.0,
-                "fee": 10.0,
-                "price": 50000.0,
-                "timestamp": 1704067200.0  # 2024-01-01 00:00:00 UTC
-            }
-        }
+        from fullon_orm.models import Position
+        
+        positions = [
+            Position(
+                symbol="BTC/USD",
+                cost=50000.0,
+                volume=1.0,
+                fee=10.0,
+                price=50000.0,
+                timestamp=1704067200.0,  # 2024-01-01 00:00:00 UTC
+                ex_id="123"
+            )
+        ]
 
         result = await account_cache.upsert_positions(123, positions)
         assert result is True
@@ -43,21 +47,25 @@ class TestAccountCacheCore:
 
     @pytest.mark.asyncio
     async def test_upsert_positions_empty_deletes(self, account_cache):
-        """Test that empty positions dict deletes data."""
+        """Test that empty positions list deletes data."""
+        from fullon_orm.models import Position
+        
         # First add some positions
-        positions = {
-            "BTC/USD": {
-                "cost": 50000.0,
-                "volume": 1.0,
-                "fee": 10.0,
-                "price": 50000.0,
-                "timestamp": 1704067200.0
-            }
-        }
+        positions = [
+            Position(
+                symbol="BTC/USD",
+                cost=50000.0,
+                volume=1.0,
+                fee=10.0,
+                price=50000.0,
+                timestamp=1704067200.0,
+                ex_id="456"
+            )
+        ]
         await account_cache.upsert_positions(456, positions)
 
-        # Now delete by passing empty dict
-        result = await account_cache.upsert_positions(456, {})
+        # Now delete by passing empty list
+        result = await account_cache.upsert_positions(456, [])
         assert result is True
 
         # Verify positions are gone
@@ -67,20 +75,24 @@ class TestAccountCacheCore:
     @pytest.mark.asyncio
     async def test_upsert_positions_update_date_only(self, account_cache):
         """Test updating only timestamp."""
+        from fullon_orm.models import Position
+        
         # First add positions
-        positions = {
-            "ETH/USD": {
-                "cost": 3000.0,
-                "volume": 10.0,
-                "fee": 5.0,
-                "price": 3000.0,
-                "timestamp": 1704067200.0
-            }
-        }
+        positions = [
+            Position(
+                symbol="ETH/USD",
+                cost=3000.0,
+                volume=10.0,
+                fee=5.0,
+                price=3000.0,
+                timestamp=1704067200.0,
+                ex_id="789"
+            )
+        ]
         await account_cache.upsert_positions(789, positions)
 
         # Update date only
-        result = await account_cache.upsert_positions(789, {}, update_date=True)
+        result = await account_cache.upsert_positions(789, [], update_date=True)
         assert result is True
 
         # Verify position data unchanged
@@ -184,15 +196,19 @@ class TestAccountCacheRetrieval:
     @pytest.mark.asyncio
     async def test_get_position_existing(self, account_cache):
         """Test getting existing position."""
-        positions = {
-            "BTC/USD": {
-                "cost": 25000.0,
-                "volume": 0.5,
-                "fee": 5.0,
-                "price": 50000.0,
-                "timestamp": 1704067200.0
-            }
-        }
+        from fullon_orm.models import Position
+        
+        positions = [
+            Position(
+                symbol="BTC/USD",
+                cost=25000.0,
+                volume=0.5,
+                fee=5.0,
+                price=50000.0,
+                timestamp=1704067200.0,
+                ex_id="123"
+            )
+        ]
         await account_cache.upsert_positions(123, positions)
 
         position = await account_cache.get_position("BTC/USD", "123")
@@ -384,49 +400,6 @@ class TestAccountCacheUtility:
             deleted = await account_cache.clean_positions()
             assert deleted == 0
 
-    def test_check_position_dict_valid(self):
-        """Test position dict validation with valid data."""
-        valid_dict = {
-            "BTC/USD": {"cost": 1000, "volume": 1, "fee": 1, "price": 1000, "timestamp": 1704067200.0},
-            "ETH/USD": {"cost": 3000, "volume": 10, "fee": 5, "price": 3000, "timestamp": 1704067200.0}
-        }
-
-        assert AccountCache._check_position_dict(valid_dict) is True
-
-    def test_check_position_dict_invalid_not_dict(self):
-        """Test validation with non-dict value."""
-        invalid_dict = {
-            "BTC/USD": "not a dict"
-        }
-
-        assert AccountCache._check_position_dict(invalid_dict) is False
-
-    def test_check_position_dict_missing_fields(self):
-        """Test validation with missing fields."""
-        invalid_dict = {
-            "BTC/USD": {"cost": 1000, "volume": 1}  # Missing fee, price, timestamp
-        }
-
-        assert AccountCache._check_position_dict(invalid_dict) is False
-
-    def test_check_position_dict_extra_fields(self):
-        """Test validation with extra fields."""
-        invalid_dict = {
-            "BTC/USD": {
-                "cost": 1000,
-                "volume": 1,
-                "fee": 1,
-                "price": 1000,
-                "timestamp": 1704067200.0,
-                "extra": "field"  # Extra field
-            }
-        }
-
-        assert AccountCache._check_position_dict(invalid_dict) is False
-
-    def test_check_position_dict_empty(self):
-        """Test validation with empty dict."""
-        assert AccountCache._check_position_dict({}) is True
 
 
 class TestAccountCacheEdgeCases:

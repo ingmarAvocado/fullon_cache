@@ -341,7 +341,6 @@ class OrdersCache:
             logger.error(f"Failed to convert Order to dict: {e}")
             return {}
 
-    # New ORM-based methods (Recommended)
     async def save_order(self, exchange: str, order: Order) -> bool:
         """Save order using fullon_orm.Order model.
         
@@ -443,29 +442,3 @@ class OrdersCache:
             logger.error(f"Failed to get order: {e}")
             return None
 
-    # Legacy methods for backward compatibility
-    async def save_order_data_legacy(self, ex_id: str, oid: str, data: dict = {}) -> None:
-        """Legacy method - use save_order() instead."""
-        try:
-            # Convert dict to Order model
-            order_dict = {
-                "ex_order_id": oid,
-                "exchange": ex_id,
-                **data
-            }
-            
-            # Handle missing required fields
-            if "volume" not in order_dict:
-                order_dict["volume"] = 0.0
-            if "timestamp" not in order_dict:
-                order_dict["timestamp"] = datetime.now(UTC)
-            
-            order = Order.from_dict(order_dict)
-            
-            success = await self.save_order(ex_id, order)
-            if not success:
-                raise Exception("Failed to save order")
-                
-        except Exception as e:
-            logger.error(f"Legacy save_order_data failed: {e}")
-            raise Exception("Error saving order status to Redis") from e

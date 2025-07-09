@@ -354,7 +354,6 @@ class TradesCache:
             logger.error(f"Failed to get trades list: {e}")
             return []
 
-    # New ORM-based methods (Recommended)
     async def push_trade(self, exchange: str, trade: Trade) -> bool:
         """Push trade using fullon_orm.Trade model.
         
@@ -480,66 +479,3 @@ class TradesCache:
                 logger.error(f"Failed to pop user trade: {e}")
             return None
 
-    # Legacy methods for backward compatibility
-    async def push_trade_list_legacy(
-        self,
-        symbol: str,
-        exchange: str,
-        trade: dict = {}
-    ) -> int:
-        """Legacy method - use push_trade() instead."""
-        try:
-            # Convert dict to Trade model if needed
-            if trade:
-                trade_model = Trade.from_dict(trade)
-                success = await self.push_trade(exchange, trade_model)
-                return 1 if success else 0
-            return 0
-        except Exception as e:
-            logger.error(f"Failed to push trade list (legacy): {e}")
-            return 0
-
-    async def get_trades_list_legacy(
-        self,
-        symbol: str,
-        exchange: str
-    ) -> list[dict]:
-        """Legacy method - use get_trades() instead."""
-        try:
-            trades = await self.get_trades(symbol, exchange)
-            return [trade.to_dict() for trade in trades]
-        except Exception as e:
-            logger.error(f"Failed to get trades list (legacy): {e}")
-            return []
-
-    async def push_my_trades_list_legacy(
-        self,
-        uid: str,
-        exchange: str,
-        trade: dict = {}
-    ) -> int:
-        """Legacy method - use push_user_trade() instead."""
-        try:
-            if trade:
-                trade_model = Trade.from_dict(trade)
-                success = await self.push_user_trade(uid, exchange, trade_model)
-                return 1 if success else 0
-            return 0
-        except Exception as e:
-            logger.error(f"Failed to push user trade (legacy): {e}")
-            return 0
-
-    async def pop_my_trade_legacy(
-        self,
-        uid: str,
-        exchange: str,
-        timeout: int = 0
-    ) -> dict | None:
-        """Legacy method - use pop_user_trade() instead."""
-        try:
-            trade = await self.pop_user_trade(uid, exchange, timeout)
-            return trade.to_dict() if trade else None
-        except Exception as e:
-            if "TimeoutError" not in str(e):
-                logger.error(f"Failed to pop user trade (legacy): {e}")
-            return None

@@ -2,7 +2,6 @@
 
 import json
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from fullon_orm.models import Order
@@ -23,16 +22,10 @@ class TestOrdersCacheLegacyMethods:
 
     @pytest.mark.asyncio
     async def test_pop_open_order_timeout(self, orders_cache):
-        """Test pop_open_order with timeout."""
-        # Try to pop from empty queue - should raise TimeoutError
+        """Test pop_open_order with timeout using short timeout."""
+        # Try to pop from empty queue with 1 second timeout - should raise TimeoutError
         with pytest.raises(TimeoutError, match="Not getting any trade"):
-            # Mock the redis client to simulate timeout
-            with patch.object(orders_cache._cache, '_redis_context') as mock_context:
-                mock_redis = AsyncMock()
-                mock_redis.blpop.side_effect = Exception("TimeoutError")
-                mock_context.return_value.__aenter__.return_value = mock_redis
-
-                await orders_cache.pop_open_order("EMPTY_QUEUE")
+            await orders_cache.pop_open_order("EMPTY_QUEUE", timeout=1)
 
     @pytest.mark.asyncio
     async def test_save_order_data(self, orders_cache):

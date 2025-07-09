@@ -26,14 +26,14 @@ class AccountCache:
     async def upsert_positions(
         self,
         ex_id: int,
-        positions: list[Position] | dict[str, dict[str, float]],
+        positions: list[Position],
         update_date: bool = False
     ) -> bool:
-        """Upsert positions using fullon_orm.Position models or legacy dict format.
+        """Upsert positions using fullon_orm.Position models.
 
         Args:
             ex_id: Exchange ID.
-            positions: List of fullon_orm.Position models OR legacy dict format.
+            positions: List of fullon_orm.Position models.
             update_date: If True, only update the timestamp for existing positions.
 
         Returns:
@@ -56,32 +56,9 @@ class AccountCache:
                     return False
 
                 if not positions:
-                    # Delete if empty list or dict
+                    # Delete if empty list
                     result = await redis.hdel(key, str_ex_id)
                     return bool(result)
-
-                # Handle both Position models and legacy dict format
-                if isinstance(positions, dict):
-                    # Legacy dict format - validate and convert to Position models
-                    if not self._check_position_dict(positions):
-                        # Invalid positions dict
-                        return False
-                    
-                    position_models = []
-                    for symbol, data in positions.items():
-                        if symbol != 'timestamp':  # Skip timestamp key
-                            position_dict = {
-                                'symbol': symbol,
-                                'ex_id': str(ex_id),
-                                'cost': data.get('cost', 0.0),
-                                'volume': data.get('volume', 0.0),
-                                'fee': data.get('fee', 0.0),
-                                'count': data.get('count', 0.0),
-                                'price': data.get('price', 0.0),
-                                'timestamp': data.get('timestamp', datetime.now(UTC).timestamp())
-                            }
-                            position_models.append(Position.from_dict(position_dict))
-                    positions = position_models
                 
                 # Convert Position models to dict format for storage
                 positions_dict = {}
@@ -253,30 +230,6 @@ class AccountCache:
 
         return positions
 
-    @staticmethod
-    def _check_position_dict(pos: dict) -> bool:
-        """Check if all items in the input dictionary have the same set of subkeys.
-
-        Args:
-            pos: A dictionary containing pairs as keys and dictionaries with subkeys as values.
-
-        Returns:
-            bool: True if all items have the same set of subkeys, False otherwise.
-        """
-        # Legacy support - count field is optional
-        required_subkeys = {'cost', 'volume', 'fee', 'price', 'timestamp'}
-        optional_subkeys = {'count'}
-        for pair_data in pos.values():
-            if not isinstance(pair_data, dict):
-                return False
-            keys = set(pair_data.keys())
-            # Check if all required keys are present
-            if not required_subkeys.issubset(keys):
-                return False
-            # Check if only valid keys are present
-            if not keys.issubset(required_subkeys | optional_subkeys):
-                return False
-        return True
 
     async def get_position(
         self,
@@ -381,57 +334,3 @@ class AccountCache:
             logger.error(f"Error retrieving accounts: {error}")
             return {}
 
-    # Legacy methods for backward compatibility
-    async def upsert_positions_legacy(
-        self,
-        ex_id: int,
-        positions: dict[str, dict[str, float]],
-        update_date: bool = False
-    ) -> bool:
-        """Legacy method - use upsert_positions() instead.
-        
-        Args:
-            ex_id: Exchange ID.
-            positions: Positions to upsert. Expected format:
-                {symbol: {'cost': float, 'volume': float, 'fee': float, 'price': float, 'timestamp': str}}
-            update_date: If True, only update the timestamp for existing positions.
-
-        Returns:
-            bool: True if successful, False otherwise.
-        """
-        try:
-            if update_date:
-                # Only update timestamp for existing positions
-                async with self._cache._redis_context() as redis:
-                    existing_data = await redis.hget("account_positions", str(ex_id))
-                    if existing_data:
-                        existing_positions = json.loads(existing_data)
-                        existing_positions['timestamp'] = self._cache._to_redis_timestamp(datetime.now(UTC))
-                        await redis.hset("account_positions", str(ex_id), json.dumps(existing_positions))
-                        return True
-                    return False
-
-            if not positions:
-                return await self.upsert_positions(ex_id, [])
-
-            # Convert dict format to Position models
-            position_models = []
-            for symbol, data in positions.items():
-                if symbol != 'timestamp':  # Skip timestamp key
-                    position_dict = {
-                        'symbol': symbol,
-                        'ex_id': str(ex_id),
-                        'cost': data.get('cost', 0.0),
-                        'volume': data.get('volume', 0.0),
-                        'fee': data.get('fee', 0.0),
-                        'count': data.get('count', 0.0),
-                        'price': data.get('price', 0.0),
-                        'timestamp': data.get('timestamp', datetime.now(UTC).timestamp())
-                    }
-                    position_models.append(Position.from_dict(position_dict))
-
-            return await self.upsert_positions(ex_id, position_models)
-
-        except Exception as error:
-            logger.error(f"Error in upsert_positions_legacy: {error}")
-            return False

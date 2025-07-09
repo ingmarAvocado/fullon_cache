@@ -245,7 +245,6 @@ class SymbolCache:
 
         return symbol_obj
 
-    # New ORM-based methods (Recommended)
     async def add_symbol(self, symbol: Symbol) -> bool:
         """Add symbol using fullon_orm.Symbol model.
         
@@ -310,7 +309,7 @@ class SymbolCache:
             logger.error(f"Failed to update symbol: {e}")
             return False
 
-    async def delete_symbol_orm(self, symbol: Symbol) -> bool:
+    async def delete_symbol(self, symbol: Symbol) -> bool:
         """Delete symbol using fullon_orm.Symbol model.
         
         Args:
@@ -427,40 +426,6 @@ class SymbolCache:
             logger.error(f"Failed to get symbols for exchange: {e}")
             return []
 
-    # Legacy methods for backward compatibility
-    async def delete_symbol(
-        self,
-        symbol: str,
-        cat_ex_id: str | None = None,
-        exchange_name: str | None = None
-    ) -> None:
-        """Remove a symbol from the Redis cache (legacy method).
-        
-        Args:
-            symbol: The symbol to remove
-            cat_ex_id: The cat_ex_id (optional)
-            exchange_name: The exchange name (optional)
-        """
-        if not exchange_name and cat_ex_id:
-            exchange_name = self._get_exchange_name_from_cat_ex_id(cat_ex_id)
-
-        if not exchange_name:
-            logger.error(f"Cannot delete symbol {symbol}: exchange_name is required")
-            return
-
-        try:
-            # Remove from symbols list
-            redis_key = f'symbols_list:{exchange_name}'
-            if await self._cache.exists(redis_key):
-                await self._cache.hdel(redis_key, symbol)
-
-            # Also remove from tickers if it exists
-            tickers_key = f'tickers:{exchange_name}'
-            if await self._cache.exists(tickers_key):
-                await self._cache.hdel(tickers_key, symbol)
-
-        except Exception as e:
-            logger.error(f"Error deleting symbol {symbol}: {e}")
 
     def _get_exchange_name_from_symbol(self, symbol: Symbol) -> str:
         """Get exchange name from Symbol model (helper method)."""
