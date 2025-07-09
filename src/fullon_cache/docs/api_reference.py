@@ -602,51 +602,198 @@ ACCOUNT_CACHE = """
 AccountCache API Reference
 ==========================
 
-User account and position management.
+User account and position management with fullon_orm.Position model support.
 
 Class: AccountCache()
 --------------------
 
 Inherits from: TickCache
 
-Position Management:
-    await upsert_positions(ex_id: int, positions: Dict[str, Dict[str, float]], 
+New ORM-Based Methods (Recommended):
+    await upsert_positions(ex_id: int, positions: List[Position] | Dict[str, Dict[str, float]], 
                           update_date: bool = False) -> bool
-        Update or insert positions for an exchange account
+        Upsert positions using fullon_orm.Position models or legacy dict format
+        Args:
+            ex_id: Exchange ID
+            positions: List of fullon_orm.Position models OR legacy dict format
+            update_date: If True, only update timestamp for existing positions
+        Returns: True if successful, False otherwise
+        
+    await upsert_position(position: Position) -> bool
+        Upsert single position using fullon_orm.Position model
+        Args:
+            position: fullon_orm.Position model
+        Returns: True if successful, False otherwise
         
     await get_position(symbol: str, ex_id: str, latest: bool = False,
                       cur_timestamp: Optional[float] = None) -> Position
-        Get position for symbol/exchange
+        Get position as fullon_orm.Position model
+        Args:
+            symbol: Trading symbol
+            ex_id: Exchange ID
+            latest: Whether to wait for latest position (simplified - ignored)
+            cur_timestamp: Current timestamp (simplified - ignored)
+        Returns: fullon_orm.Position model (empty Position if not found)
         
     await get_all_positions() -> List[Position]
-        Get all positions across all accounts
-        
-    await clean_positions() -> int
-        Remove positions with zero size
+        Get all positions as fullon_orm.Position models
+        Returns: List of fullon_orm.Position models across all accounts
 
 Account Management:
     await upsert_user_account(ex_id: int, account: dict = {}, 
                              update_date: str = "") -> bool
         Update or insert account data
+        Args:
+            ex_id: Exchange ID
+            account: Account information dictionary
+            update_date: If provided, only update the date field
+        Returns: True if successful, False otherwise
         
     await get_full_account(exchange: int, currency: str) -> dict
         Get complete account data for exchange/currency
+        Args:
+            exchange: Exchange ID
+            currency: Base currency
+        Returns: Account data for the currency or empty dict
         
     await get_all_accounts() -> dict
-        Get all accounts
+        Get all accounts data
+        Returns: Dictionary of all account data
+        
+    await clean_positions() -> int
+        Remove all positions from Redis
+        Returns: Number of keys deleted (0, 1, or 2)
 
-Example:
+Legacy Methods (Backward Compatible):
+    await upsert_positions_legacy(ex_id: int, positions: Dict[str, Dict[str, float]], 
+                                 update_date: bool = False) -> bool
+        Legacy method - use upsert_positions() instead
+        Args:
+            ex_id: Exchange ID
+            positions: Positions dict with expected format:
+                {symbol: {'cost': float, 'volume': float, 'fee': float, 'price': float, 'timestamp': str}}
+            update_date: If True, only update timestamp for existing positions
+        Returns: True if successful, False otherwise
+
+Examples:
+
+New ORM-Based Usage (Recommended):
+    from fullon_orm.models import Position
+    import time
+    
     cache = AccountCache()
     
-    # Update positions
-    await cache.upsert_positions(123, {
-        "BTC/USDT": {"size": 0.5, "cost": 25000.0},
-        "ETH/USDT": {"size": 10.0, "cost": 20000.0}
-    })
+    # Create positions with ORM models
+    positions = [
+        Position(
+            symbol="BTC/USDT",
+            cost=25000.0,
+            volume=0.5,
+            fee=25.0,
+            count=1.0,
+            price=50000.0,
+            timestamp=time.time(),
+            ex_id="123",
+            side="long"
+        ),
+        Position(
+            symbol="ETH/USDT",
+            cost=20000.0,
+            volume=10.0,
+            fee=20.0,
+            count=1.0,
+            price=2000.0,
+            timestamp=time.time(),
+            ex_id="123",
+            side="long"
+        )
+    ]
     
-    # Get specific position
+    # Upsert positions with ORM models
+    success = await cache.upsert_positions(123, positions)
+    if success:
+        print("Positions updated successfully")
+    
+    # Get specific position as ORM model
     position = await cache.get_position("BTC/USDT", "123")
-    print(f"Size: {position.size}, Cost: {position.cost}")
+    print(f"BTC position: Volume={position.volume}, Cost={position.cost}")
+    print(f"Side: {position.side}, Fee: {position.fee}")
+    
+    # Upsert single position
+    new_position = Position(
+        symbol="ADA/USDT",
+        cost=1000.0,
+        volume=1000.0,
+        fee=1.0,
+        count=1.0,
+        price=1.0,
+        timestamp=time.time(),
+        ex_id="123",
+        side="long"
+    )
+    success = await cache.upsert_position(new_position)
+    print(f"Single position upsert: {success}")
+    
+    # Get all positions as ORM models
+    all_positions = await cache.get_all_positions()
+    print(f"Total positions: {len(all_positions)}")
+    for pos in all_positions:
+        print(f"  {pos.symbol}: Volume={pos.volume}, Cost={pos.cost}")
+
+Legacy Usage (Still Supported):
+    cache = AccountCache()
+    
+    # Update positions with legacy dict format
+    positions_dict = {
+        "BTC/USDT": {"cost": 25000.0, "volume": 0.5, "fee": 25.0, "price": 50000.0, "timestamp": time.time()},
+        "ETH/USDT": {"cost": 20000.0, "volume": 10.0, "fee": 20.0, "price": 2000.0, "timestamp": time.time()}
+    }
+    
+    await cache.upsert_positions(123, positions_dict)  # Union type accepts both formats
+    
+    # Get specific position (always returns Position model)
+    position = await cache.get_position("BTC/USDT", "123")
+    print(f"Volume: {position.volume}, Cost: {position.cost}")
+    
+    # Account operations
+    account_data = {
+        "balance": 10000.0,
+        "equity": 12000.0,
+        "margin": 2000.0
+    }
+    await cache.upsert_user_account(123, account_data)
+
+fullon_orm.Position Model Properties:
+    symbol: str                    # Trading pair (e.g., "BTC/USDT")
+    cost: float                    # Total cost of position
+    volume: float                  # Position volume/size
+    fee: float                     # Trading fees paid
+    count: Optional[float]         # Position count (optional for backward compatibility)
+    price: float                   # Average position price
+    timestamp: float               # Position timestamp
+    ex_id: str                     # Exchange ID
+    side: Optional[str]            # Position side ("long", "short")
+    realized_pnl: Optional[float]  # Realized profit/loss
+    unrealized_pnl: Optional[float] # Unrealized profit/loss
+    
+    # Methods:
+    to_dict() -> dict              # Convert to dictionary
+    from_dict(data: dict) -> Position  # Create from dictionary (class method)
+
+Key Features:
+- Union type support: accepts both Position models and legacy dicts
+- Always returns Position models for type safety
+- Automatic timestamp management with UTC timezone
+- Flexible validation (count field optional for backward compatibility)
+- Full backward compatibility with existing code
+- Proper error handling and logging
+- Redis key patterns:
+  - Positions: "account_positions" (hash with ex_id as key)
+  - Accounts: "accounts" (hash with ex_id as key)
+
+Note: The upsert_positions() method uses union types to accept both
+List[Position] and Dict[str, Dict[str, float]] for maximum flexibility
+while encouraging ORM model usage.
 """
 
 ORDERS_CACHE = """
