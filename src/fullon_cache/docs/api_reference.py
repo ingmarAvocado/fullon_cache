@@ -514,21 +514,36 @@ ORDERS_CACHE = """
 OrdersCache API Reference
 =========================
 
-Order queue and status management.
+Order queue and status management with fullon_orm.Order model support.
 
 Class: OrdersCache()
 --------------------
 
 Inherits from: AccountCache
 
-Order Queue Operations:
-    await push_open_order(oid: str, local_oid: str) -> None
-        Push order ID pair to processing queue
+New ORM-Based Methods (Recommended):
+    await save_order(exchange: str, order: Order) -> bool
+        Save order using fullon_orm.Order model
+        Args:
+            exchange: Exchange name
+            order: fullon_orm.Order model instance
+        Returns: True if successful, False otherwise
         
-    await pop_open_order(oid: str) -> Optional[str]
-        Pop local order ID for given order ID
+    await update_order(exchange: str, order: Order) -> bool
+        Update existing order with new data
+        Args:
+            exchange: Exchange name
+            order: fullon_orm.Order model with updates
+        Returns: True if successful, False otherwise
+        
+    await get_order(exchange: str, order_id: str) -> Optional[Order]
+        Get order as fullon_orm.Order model
+        Args:
+            exchange: Exchange name
+            order_id: Order ID (ex_order_id or order_id)
+        Returns: fullon_orm.Order model or None if not found
 
-Order Data Management:
+Legacy Methods (Backward Compatible):
     await save_order_data(ex_id: str, oid: str, data: Dict = {}) -> None
         Save order data with automatic expiration
         
@@ -538,11 +553,61 @@ Order Data Management:
     await get_orders(ex_id: str) -> List[Order]
         Get all orders for an exchange
 
+Order Queue Operations:
+    await push_open_order(oid: str, local_oid: str) -> None
+        Push order ID pair to processing queue
+        
+    await pop_open_order(oid: str) -> Optional[str]
+        Pop local order ID for given order ID
+
 Account Data:
     await get_full_accounts(ex_id: str) -> Optional[Any]
         Get full account data (inherited)
 
-Example:
+Examples:
+
+New ORM-Based Usage (Recommended):
+    from fullon_orm.models import Order
+    
+    cache = OrdersCache()
+    
+    # Create and save order with ORM model
+    order = Order(
+        ex_order_id="EX_12345",
+        exchange="binance",
+        symbol="BTC/USDT",
+        side="buy",
+        volume=0.1,
+        price=50000.0,
+        status="open",
+        order_type="limit",
+        bot_id=123,
+        uid=456,
+        ex_id=789
+    )
+    
+    success = await cache.save_order(exchange="binance", order=order)
+    if success:
+        print("Order saved successfully")
+    
+    # Get order as ORM model
+    retrieved_order = await cache.get_order("binance", "EX_12345")
+    if retrieved_order:
+        print(f"Order status: {retrieved_order.status}")
+        print(f"Volume: {retrieved_order.volume}")
+    
+    # Update order with partial data
+    update_order = Order(
+        ex_order_id="EX_12345",
+        status="filled",
+        final_volume=0.095
+    )
+    
+    success = await cache.update_order("binance", update_order)
+    if success:
+        print("Order updated successfully")
+
+Legacy Usage (Still Supported):
     cache = OrdersCache()
     
     # Queue order for processing
@@ -552,14 +617,50 @@ Example:
     await cache.save_order_data("binance", "order123", {
         "symbol": "BTC/USDT",
         "side": "buy",
-        "size": 0.1,
-        "price": 50000
+        "volume": 0.1,
+        "price": 50000,
+        "status": "open"
     })
     
     # Check order status
     order = await cache.get_order_status("binance", "order123")
     if order:
         print(f"Order status: {order.status}")
+        print(f"Ex Order ID: {order.ex_order_id}")
+
+fullon_orm.Order Model Properties:
+    order_id: Optional[int]        # Internal order ID
+    ex_order_id: Optional[str]     # Exchange order ID
+    exchange: Optional[str]        # Exchange name
+    symbol: Optional[str]          # Trading pair
+    side: Optional[str]            # 'buy' or 'sell'
+    order_type: Optional[str]      # 'limit', 'market', etc.
+    volume: Optional[float]        # Order volume
+    final_volume: Optional[float]  # Filled volume
+    price: Optional[float]         # Order price
+    status: Optional[str]          # 'open', 'filled', 'canceled', etc.
+    timestamp: Optional[datetime]  # Order timestamp
+    bot_id: Optional[int]          # Bot ID that created order
+    uid: Optional[int]             # User ID
+    ex_id: Optional[int]           # Exchange account ID
+    cat_ex_id: Optional[int]       # Catalog exchange ID
+    command: Optional[str]         # Trading command
+    reason: Optional[str]          # Order reason
+    futures: Optional[bool]        # Futures order flag
+    leverage: Optional[float]      # Leverage amount
+    tick: Optional[float]          # Tick size
+    plimit: Optional[float]        # Price limit
+    
+    # Methods:
+    to_dict() -> dict             # Convert to dictionary
+    from_dict(data: dict) -> Order  # Create from dictionary (class method)
+
+Key Features:
+- Automatic TTL for cancelled orders (1 hour)
+- Backward compatibility with legacy methods
+- Type-safe ORM model integration
+- Proper error handling and logging
+- Redis key pattern: order_status:{exchange}
 """
 
 BOT_CACHE = """

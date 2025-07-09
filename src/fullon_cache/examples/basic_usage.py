@@ -99,29 +99,80 @@ async def order_operations():
     orders_cache = OrdersCache()
     
     try:
+        # === NEW ORM-BASED METHODS (RECOMMENDED) ===
+        print("\\n--- Using ORM-based methods ---")
+        
+        # Import fullon_orm Order model
+        from fullon_orm.models import Order
+        from datetime import datetime, timezone
+        
+        # Create order with ORM model
+        order = Order(
+            ex_order_id="EX_12345",
+            exchange="binance",
+            symbol="BTC/USDT",
+            side="buy",
+            volume=0.1,
+            price=50000.0,
+            status="open",
+            order_type="limit",
+            bot_id=123,
+            uid=456,
+            ex_id=789,
+            timestamp=datetime.now(timezone.utc)
+        )
+        
+        print(f"Saving order (ORM): {order.symbol} {order.side} {order.volume}")
+        success = await orders_cache.save_order("binance", order)
+        print(f"Save successful: {success}")
+        
+        # Get order as ORM model
+        retrieved_order = await orders_cache.get_order("binance", "EX_12345")
+        if retrieved_order:
+            print(f"Retrieved order (ORM): {retrieved_order.symbol} - Status: {retrieved_order.status}")
+        
+        # Update order with partial data
+        update_order = Order(
+            ex_order_id="EX_12345",
+            status="filled",
+            final_volume=0.095
+        )
+        
+        print("Updating order status to filled")
+        success = await orders_cache.update_order("binance", update_order)
+        print(f"Update successful: {success}")
+        
+        # Get updated order
+        final_order = await orders_cache.get_order("binance", "EX_12345")
+        if final_order:
+            print(f"Final order (ORM): Status={final_order.status}, Final Volume={final_order.final_volume}")
+        
+        # === LEGACY METHODS (STILL SUPPORTED) ===
+        print("\\n--- Using legacy methods ---")
+        
         # Push order to queue
         await orders_cache.push_open_order("order123", "local456")
         print("Pushed order to queue")
         
         # Save order data
         order_data = {
-            "symbol": "BTC/USDT",
+            "symbol": "ETH/USDT",
             "side": "buy",
-            "size": 0.1,
-            "price": 50000,
+            "volume": 0.1,
+            "price": 3000,
             "status": "pending"
         }
         await orders_cache.save_order_data("binance", "order123", order_data)
-        print(f"Saved order data: {order_data}")
+        print(f"Saved order data (legacy): {order_data}")
         
         # Get order status
         order = await orders_cache.get_order_status("binance", "order123")
         if order:
-            print(f"Order found with data: {order}")
+            print(f"Order found (legacy): {order.symbol} - Status: {order.status}")
         
         # Pop order from queue
-        local_id = await orders_cache.pop_open_order("order123")
-        print(f"Popped order with local ID: {local_id}")
+        popped_id = await orders_cache.pop_open_order("local456")
+        print(f"Popped order with ID: {popped_id}")
         
     finally:
         await orders_cache.close()

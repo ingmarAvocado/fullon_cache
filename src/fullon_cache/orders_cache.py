@@ -259,8 +259,12 @@ class OrdersCache:
                 except (ValueError, TypeError):
                     pass
 
-                # Always store as string for ex_order_id
+            # Handle ex_order_id - always use order_id as ex_order_id for legacy compatibility
+            # The order_id field contains the Redis key, which should be the ex_order_id
+            if 'order_id' in data and data['order_id'] is not None:
                 clean_data['ex_order_id'] = str(data['order_id'])
+            elif 'ex_order_id' in data and data['ex_order_id'] is not None:
+                clean_data['ex_order_id'] = str(data['ex_order_id'])
 
             # Handle numeric fields with proper conversion
             numeric_fields = {
@@ -336,3 +340,132 @@ class OrdersCache:
         except Exception as e:
             logger.error(f"Failed to convert Order to dict: {e}")
             return {}
+
+    # New ORM-based methods (Recommended)
+    async def save_order(self, exchange: str, order: Order) -> bool:
+        """Save order using fullon_orm.Order model.
+        
+        Args:
+            exchange: Exchange name
+            order: fullon_orm.Order model
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            redis_key = f"order_status:{exchange}"
+            order_id = str(order.ex_order_id or order.order_id)
+            
+            # Convert Order to dict for Redis storage
+            order_dict = self._order_to_dict(order)
+            order_dict['timestamp'] = self._cache._to_redis_timestamp(datetime.now(UTC))
+            order_dict['order_id'] = order_id
+            
+            async with self._cache._redis_context() as redis_client:
+                # Store in Redis
+                await redis_client.hset(redis_key, order_id, json.dumps(order_dict))
+                
+                # Set TTL for cancelled orders
+                if order.status == "canceled":
+                    await redis_client.expire(redis_key, 60 * 60)  # 1 hour
+            
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save order: {e}")
+            return False
+
+    async def update_order(self, exchange: str, order: Order) -> bool:
+        """Update existing order with new data.
+        
+        Args:
+            exchange: Exchange name
+            order: fullon_orm.Order model with updates
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            redis_key = f"order_status:{exchange}"
+            order_id = str(order.ex_order_id or order.order_id)
+            
+            async with self._cache._redis_context() as redis_client:
+                # Get existing data
+                existing_data = await redis_client.hget(redis_key, order_id)
+                if existing_data:
+                    existing_dict = json.loads(existing_data)
+                    
+                    # Merge with new data
+                    new_dict = self._order_to_dict(order)
+                    # Only update non-None values
+                    for key, value in new_dict.items():
+                        if value is not None:
+                            existing_dict[key] = value
+                    
+                    # Update timestamp
+                    existing_dict['timestamp'] = self._cache._to_redis_timestamp(datetime.now(UTC))
+                    
+                    # Store merged data
+                    await redis_client.hset(redis_key, order_id, json.dumps(existing_dict))
+                    
+                    # Set TTL for cancelled orders
+                    if existing_dict.get('status') == "canceled":
+                        await redis_client.expire(redis_key, 60 * 60)
+                    
+                    return True
+                else:
+                    # No existing data, treat as new save
+                    return await self.save_order(exchange, order)
+        except Exception as e:
+            logger.error(f"Failed to update order: {e}")
+            return False
+
+    async def get_order(self, exchange: str, order_id: str) -> Order | None:
+        """Get order as fullon_orm.Order model.
+        
+        Args:
+            exchange: Exchange name
+            order_id: Order ID (ex_order_id or order_id)
+            
+        Returns:
+            fullon_orm.Order model or None if not found
+        """
+        try:
+            redis_key = f"order_status:{exchange}"
+            
+            async with self._cache._redis_context() as redis_client:
+                order_data = await redis_client.hget(redis_key, str(order_id))
+                
+                if order_data:
+                    order_dict = json.loads(order_data)
+                    return self._dict_to_order(order_dict)
+                return None
+        except Exception as e:
+            logger.error(f"Failed to get order: {e}")
+            return None
+
+    # Legacy methods for backward compatibility
+    async def save_order_data_legacy(self, ex_id: str, oid: str, data: dict = {}) -> None:
+        """Legacy method - use save_order() instead."""
+        try:
+            # Convert dict to Order model
+            order_dict = {
+                "ex_order_id": oid,
+                "exchange": ex_id,
+                **data
+            }
+            
+            # Handle missing required fields
+            if "volume" not in order_dict:
+                order_dict["volume"] = 0.0
+            if "timestamp" not in order_dict:
+                order_dict["timestamp"] = datetime.now(UTC)
+            
+            order = Order.from_dict(order_dict)
+            
+            success = await self.save_order(ex_id, order)
+            if not success:
+                raise Exception("Failed to save order")
+                
+        except Exception as e:
+            logger.error(f"Legacy save_order_data failed: {e}")
+            raise Exception("Error saving order status to Redis") from e
