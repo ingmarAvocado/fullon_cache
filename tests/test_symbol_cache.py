@@ -13,19 +13,18 @@ sys.path.append(os.path.dirname(__file__))
 from factories.symbol import SymbolFactory
 
 
-def create_test_symbol(symbol="BTC/USDT", base="BTC", quote="USDT", exchange="binance"):
+def create_test_symbol(symbol="BTC/USDT", cat_ex_id=1):
     """Factory function to create test Symbol objects."""
     return Symbol(
         symbol=symbol,
-        base=base,
-        quote=quote,
-        exchange=exchange,
-        precision=8,
-        margin=True,
-        leverage=10.0,
-        contract_size=1.0,
-        tick_size=0.01,
-        description=f"{base} to {quote} trading pair"
+        base=symbol.split("/")[0],
+        quote=symbol.split("/")[1],
+        cat_ex_id=cat_ex_id,
+        decimals=8,
+        updateframe="1h",
+        backtest=30,
+        futures=False,
+        only_ticker=False
     )
 
 
@@ -76,13 +75,13 @@ class TestSymbolCache:
         cache = SymbolCache()
         
         try:
-            exchange = "binance"
+            exchange = "test_from_cache"  # Use unique exchange name
             
             # Manually populate cache
             symbols = [
-                create_test_symbol("BTC/USDT", "BTC", "USDT"),
-                create_test_symbol("ETH/USDT", "ETH", "USDT"),
-                create_test_symbol("ADA/USDT", "ADA", "USDT")
+                create_test_symbol("BTC/USDT", 1),
+                create_test_symbol("ETH/USDT", 1),
+                create_test_symbol("ADA/USDT", 1)
             ]
             
             async with cache._cache._redis_context() as redis_client:
@@ -124,10 +123,10 @@ class TestSymbolCache:
         cache = SymbolCache()
         
         try:
-            exchange = "binance"
+            exchange = "test_decode_error"  # Use unique exchange name
             
             # Manually insert valid and invalid data
-            valid_symbol = create_test_symbol("ETH/USDT", "ETH", "USDT")
+            valid_symbol = create_test_symbol("ETH/USDT", 1)
             
             async with cache._cache._redis_context() as redis_client:
                 redis_key = f"symbols_list:{exchange}"
@@ -153,8 +152,8 @@ class TestSymbolCache:
             
             # Manually populate cache
             symbols = [
-                create_test_symbol("BTC/USDT", "BTC", "USDT"),
-                create_test_symbol("ETH/USDT", "ETH", "USDT")
+                create_test_symbol("BTC/USDT", 1),
+                create_test_symbol("ETH/USDT", 1)
             ]
             
             async with cache._cache._redis_context() as redis_client:
@@ -191,7 +190,7 @@ class TestSymbolCache:
         try:
             symbol_name = "BTC/USDT"
             exchange_name = "binance"
-            test_symbol = create_test_symbol(symbol_name, "BTC", "USDT")
+            test_symbol = create_test_symbol(symbol_name, 1)
 
             # Populate cache
             async with cache._cache._redis_context() as redis_client:
@@ -281,7 +280,7 @@ class TestSymbolCache:
         try:
             symbol_name = "BTC/USDT"
             exchange_name = "binance"
-            test_symbol = create_test_symbol(symbol_name, "BTC", "USDT")
+            test_symbol = create_test_symbol(symbol_name, 1)
 
             # Populate cache with symbol and ticker
             async with cache._cache._redis_context() as redis_client:
@@ -297,8 +296,8 @@ class TestSymbolCache:
                 assert symbols_exists
                 assert tickers_exists
 
-            # Delete symbol
-            await cache.delete_symbol(symbol_name, exchange_name=exchange_name)
+            # Delete symbol using ORM object
+            await cache.delete_symbol(test_symbol)
 
             # Verify deletion
             async with cache._cache._redis_context() as redis_client:
@@ -347,10 +346,10 @@ class TestSymbolCache:
         try:
             exchange = "binance"
             symbols = [
-                create_test_symbol("BTC/USDT", "BTC", "USDT"),
-                create_test_symbol("ETH/USDT", "ETH", "USDT"),
-                create_test_symbol("ADA/USDT", "ADA", "USDT"),
-                create_test_symbol("DOT/USDT", "DOT", "USDT")
+                create_test_symbol("BTC/USDT", 1),
+                create_test_symbol("ETH/USDT", 1),
+                create_test_symbol("ADA/USDT", 1),
+                create_test_symbol("DOT/USDT", 1)
             ]
 
             # Populate cache
@@ -390,7 +389,7 @@ class TestSymbolCache:
         
         try:
             # Create symbol with specific properties
-            symbol = create_test_symbol("BTC/USDT", "BTC", "USDT")
+            symbol = create_test_symbol("BTC/USDT", 1)
             symbol.precision = 8
             symbol.margin = True
             symbol.leverage = 125.0
@@ -419,13 +418,13 @@ class TestSymbolCache:
         try:
             # Create symbols for different exchanges
             binance_symbols = [
-                create_test_symbol("BTC/USDT", "BTC", "USDT"),
-                create_test_symbol("ETH/USDT", "ETH", "USDT")
+                create_test_symbol("BTC/USDT", 1),
+                create_test_symbol("ETH/USDT", 1)
             ]
             
             kraken_symbols = [
-                create_test_symbol("BTC/USD", "BTC", "USD"),
-                create_test_symbol("ETH/EUR", "ETH", "EUR")
+                create_test_symbol("BTC/USD", 2),
+                create_test_symbol("ETH/EUR", 3)
             ]
 
             # Populate both exchanges
@@ -460,7 +459,7 @@ class TestSymbolCache:
         cache = SymbolCache()
         
         try:
-            original_symbol = create_test_symbol("BTC/USDT", "BTC", "USDT")
+            original_symbol = create_test_symbol("BTC/USDT", 1)
             original_symbol.contract_size = 0.001
             original_symbol.description = "Bitcoin to USDT pair"
 
