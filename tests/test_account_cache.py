@@ -103,23 +103,22 @@ class TestAccountCacheCore:
     @pytest.mark.asyncio
     async def test_upsert_positions_update_date_no_existing(self, account_cache):
         """Test update_date with no existing positions."""
-        result = await account_cache.upsert_positions(999, {}, update_date=True)
+        result = await account_cache.upsert_positions(999, [], update_date=True)
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_upsert_positions_invalid_dict(self, account_cache):
-        """Test with invalid position dictionary."""
-        # Missing required fields
+    async def test_upsert_positions_invalid_input(self, account_cache):
+        """Test with invalid input (not list of Position objects)."""
+        # Pass a dict instead of list of Position objects
         invalid_positions = {
             "BTC/USD": {
                 "cost": 50000.0,
                 "volume": 1.0
-                # Missing fee, price, timestamp
             }
         }
 
         result = await account_cache.upsert_positions(111, invalid_positions)
-        assert result is False  # Should return False for invalid dict
+        assert result is False  # Should return False for invalid input
 
         # Verify no position stored
         position = await account_cache.get_position("BTC/USD", "111")
@@ -237,7 +236,17 @@ class TestAccountCacheRetrieval:
     async def test_get_position_error_handling(self, account_cache):
         """Test error handling in get_position."""
         # First add a position
-        positions = {"BTC/USD": {"cost": 1000, "volume": 1, "fee": 1, "price": 1000, "timestamp": 1704067200.0}}
+        positions = [
+            Position(
+                symbol="BTC/USD",
+                cost=1000.0,
+                volume=1.0,
+                fee=1.0,
+                price=1000.0,
+                timestamp=1704067200.0,
+                ex_id="123"
+            )
+        ]
         await account_cache.upsert_positions(123, positions)
 
         # Mock JSON decode error
@@ -255,13 +264,37 @@ class TestAccountCacheRetrieval:
         await account_cache.clean_positions()
 
         # Add positions for multiple exchanges
-        positions1 = {
-            "BTC/USD": {"cost": 50000, "volume": 1, "fee": 10, "price": 50000, "timestamp": 1704067200.0},
-            "ETH/USD": {"cost": 3000, "volume": 10, "fee": 5, "price": 3000, "timestamp": 1704067200.0}
-        }
-        positions2 = {
-            "BTC/EUR": {"cost": 45000, "volume": 0.5, "fee": 8, "price": 45000, "timestamp": 1704067200.0}
-        }
+        positions1 = [
+            Position(
+                symbol="BTC/USD",
+                cost=50000.0,
+                volume=1.0,
+                fee=10.0,
+                price=50000.0,
+                timestamp=1704067200.0,
+                ex_id="123"
+            ),
+            Position(
+                symbol="ETH/USD",
+                cost=3000.0,
+                volume=10.0,
+                fee=5.0,
+                price=3000.0,
+                timestamp=1704067200.0,
+                ex_id="123"
+            )
+        ]
+        positions2 = [
+            Position(
+                symbol="BTC/EUR",
+                cost=45000.0,
+                volume=0.5,
+                fee=8.0,
+                price=45000.0,
+                timestamp=1704067200.0,
+                ex_id="456"
+            )
+        ]
 
         await account_cache.upsert_positions(123, positions1)
         await account_cache.upsert_positions(456, positions2)
@@ -289,7 +322,17 @@ class TestAccountCacheRetrieval:
     async def test_get_all_positions_parse_error(self, account_cache):
         """Test get_all_positions with parse errors."""
         # Insert some valid data
-        positions = {"BTC/USD": {"cost": 1000, "volume": 1, "fee": 1, "price": 1000, "timestamp": 1704067200.0}}
+        positions = [
+            Position(
+                symbol="BTC/USD",
+                cost=1000.0,
+                volume=1.0,
+                fee=1.0,
+                price=1000.0,
+                timestamp=1704067200.0,
+                ex_id="123"
+            )
+        ]
         await account_cache.upsert_positions(123, positions)
 
         # Mock a JSON error for one entry
@@ -376,7 +419,17 @@ class TestAccountCacheUtility:
     async def test_clean_positions(self, account_cache):
         """Test cleaning all positions and accounts."""
         # Add some data
-        positions = {"BTC/USD": {"cost": 1000, "volume": 1, "fee": 1, "price": 1000, "timestamp": 1704067200.0}}
+        positions = [
+            Position(
+                symbol="BTC/USD",
+                cost=1000.0,
+                volume=1.0,
+                fee=1.0,
+                price=1000.0,
+                timestamp=1704067200.0,
+                ex_id="123"
+            )
+        ]
         await account_cache.upsert_positions(123, positions)
         await account_cache.upsert_user_account(456, {"USDT": {"balance": 5000}})
 
@@ -408,10 +461,16 @@ class TestAccountCacheEdgeCases:
     @pytest.mark.asyncio
     async def test_mixed_type_ex_id(self, account_cache):
         """Test handling of both int and str ex_id."""
-        positions = {"BTC/USD": {"cost": 1000, "volume": 1, "fee": 1, "price": 1000, "timestamp": 1704067200.0}}
-
         # Use int ex_id
-        await account_cache.upsert_positions(123, positions)
+        await account_cache.upsert_positions(123, [Position(
+            symbol="BTC/USD",
+            cost=1000.0,
+            volume=1.0,
+            fee=1.0,
+            price=1000.0,
+            timestamp=1704067200.0,
+            ex_id="123"
+        )])
         position1 = await account_cache.get_position("BTC/USD", "123")
         assert position1.volume == 1.0
 
@@ -433,15 +492,21 @@ class TestAccountCacheEdgeCases:
     @pytest.mark.asyncio
     async def test_position_timestamp_fallback(self, account_cache):
         """Test timestamp handling in positions."""
-        # Position without individual timestamp should use account timestamp
-        positions = {
-            "BTC/USD": {"cost": 1000, "volume": 1, "fee": 1, "price": 1000, "timestamp": 1704067200.0},
-            "timestamp": 1234567890.0  # Account-level timestamp
-        }
+        # Position with timestamp
+        positions = [
+            Position(
+                symbol="BTC/USD",
+                cost=1000.0,
+                volume=1.0,
+                fee=1.0,
+                price=1000.0,
+                timestamp=1704067200.0,
+                ex_id="123"
+            )
+        ]
 
-        # Directly insert into Redis to test parsing
-        async with account_cache._cache._redis_context() as redis:
-            await redis.hset("account_positions", "123", json.dumps(positions))
+        # Store positions normally, then check the timestamp
+        await account_cache.upsert_positions(123, positions)
 
         position = await account_cache.get_position("BTC/USD", "123")
         assert position.timestamp == 1704067200.0  # Uses position's own timestamp
@@ -452,9 +517,17 @@ class TestAccountCacheEdgeCases:
         import asyncio
 
         async def update_position(symbol, ex_id):
-            positions = {
-                symbol: {"cost": 1000, "volume": 1, "fee": 1, "price": 1000, "timestamp": 1704067200.0}
-            }
+            positions = [
+                Position(
+                    symbol=symbol,
+                    cost=1000.0,
+                    volume=1.0,
+                    fee=1.0,
+                    price=1000.0,
+                    timestamp=1704067200.0,
+                    ex_id=str(ex_id)
+                )
+            ]
             return await account_cache.upsert_positions(ex_id, positions)
 
         # Run concurrent updates
