@@ -276,14 +276,51 @@ SYMBOL_CACHE = """
 SymbolCache API Reference
 =========================
 
-Symbol metadata caching with auto-refresh from database.
+Symbol metadata caching with fullon_orm.Symbol model support and auto-refresh from database.
 
 Class: SymbolCache()
 --------------------
 
 Note: Does NOT inherit from BaseCache, uses composition instead.
 
-Symbol Operations:
+New ORM-Based Methods (Recommended):
+    await add_symbol(symbol: Symbol) -> bool
+        Add symbol using fullon_orm.Symbol model
+        Args:
+            symbol: fullon_orm.Symbol model instance
+        Returns: True if successful, False otherwise
+        
+    await update_symbol(symbol: Symbol) -> bool
+        Update symbol using fullon_orm.Symbol model
+        Args:
+            symbol: fullon_orm.Symbol model instance with updates
+        Returns: True if successful, False otherwise
+        
+    await delete_symbol_orm(symbol: Symbol) -> bool
+        Delete symbol using fullon_orm.Symbol model
+        Args:
+            symbol: fullon_orm.Symbol model instance
+        Returns: True if successful, False otherwise
+        
+    await get_symbol_by_model(symbol: Symbol) -> Optional[Symbol]
+        Get symbol using fullon_orm.Symbol model as search criteria
+        Args:
+            symbol: fullon_orm.Symbol model with search criteria
+        Returns: fullon_orm.Symbol model or None if not found
+        
+    await symbol_exists(symbol: Symbol) -> bool
+        Check if symbol exists using fullon_orm.Symbol model
+        Args:
+            symbol: fullon_orm.Symbol model to check
+        Returns: True if symbol exists, False otherwise
+        
+    await get_symbols_for_exchange(symbol: Symbol) -> List[Symbol]
+        Get all symbols for the same exchange as the provided symbol
+        Args:
+            symbol: fullon_orm.Symbol model to identify exchange
+        Returns: List of fullon_orm.Symbol models for the same exchange
+
+Legacy Methods (Backward Compatible):
     await get_symbols(exchange: str, loop: int = 0, force: bool = False) -> List[Symbol]
         Get all symbols for an exchange
         - loop: Retry attempts on failure
@@ -307,15 +344,117 @@ Resource Management:
     async with SymbolCache() as cache:
         Context manager support
 
-Example:
+Examples:
+
+New ORM-Based Usage (Recommended):
+    from fullon_orm.models import Symbol
+    
+    cache = SymbolCache()
+    
+    # Create and add symbol with ORM model
+    symbol = Symbol(
+        symbol="BTC/USDT",
+        cat_ex_id=1,
+        base="BTC",
+        quote="USDT",
+        decimals=8,
+        updateframe="1h",
+        backtest=30,
+        futures=False,
+        only_ticker=False
+    )
+    
+    success = await cache.add_symbol(symbol)
+    if success:
+        print("Symbol added successfully")
+    
+    # Get symbol using ORM model as search criteria
+    search_symbol = Symbol(symbol="BTC/USDT", cat_ex_id=1)
+    retrieved_symbol = await cache.get_symbol_by_model(search_symbol)
+    if retrieved_symbol:
+        print(f"Symbol ID: {retrieved_symbol.symbol_id}")
+        print(f"Decimals: {retrieved_symbol.decimals}")
+        print(f"Base: {retrieved_symbol.base}")
+    
+    # Check if symbol exists
+    exists = await cache.symbol_exists(symbol)
+    print(f"Symbol exists: {exists}")
+    
+    # Update symbol with new data
+    symbol.decimals = 10
+    symbol.backtest = 60
+    success = await cache.update_symbol(symbol)
+    if success:
+        print("Symbol updated successfully")
+    
+    # Get all symbols for the same exchange
+    exchange_symbols = await cache.get_symbols_for_exchange(symbol)
+    print(f"Found {len(exchange_symbols)} symbols on same exchange")
+    
+    # Delete symbol using ORM model
+    success = await cache.delete_symbol_orm(symbol)
+    if success:
+        print("Symbol deleted successfully")
+
+Legacy Usage (Still Supported):
     async with SymbolCache() as cache:
         # Get all Binance symbols
         symbols = await cache.get_symbols("binance")
+        print(f"Found {len(symbols)} symbols")
         
         # Get specific symbol
         btc = await cache.get_symbol("BTC/USDT", exchange_name="binance")
         if btc:
-            print(f"Symbol ID: {btc.symbol_id}, Min size: {btc.min_order_size}")
+            print(f"Symbol ID: {btc.symbol_id}")
+            print(f"Base: {btc.base}, Quote: {btc.quote}")
+            print(f"Decimals: {btc.decimals}")
+        
+        # Get symbols by exchange ID
+        symbols_by_id = await cache.get_symbols_by_ex_id(1)
+        print(f"Exchange ID 1 has {len(symbols_by_id)} symbols")
+        
+        # Delete symbol (legacy method)
+        await cache.delete_symbol("BTC/USDT", exchange_name="binance")
+
+fullon_orm.Symbol Model Properties:
+    symbol_id: Optional[int]       # Auto-incrementing primary key
+    symbol: str                    # Trading pair (e.g., "BTC/USDT")
+    cat_ex_id: int                 # Exchange type ID (foreign key)
+    base: str                      # Base currency (e.g., "BTC")
+    quote: Optional[str]           # Quote currency (e.g., "USDT")
+    decimals: int                  # Price decimal precision (default: 8)
+    updateframe: str               # OHLCV update timeframe (default: "1h")
+    backtest: int                  # Days of historical data (default: 30)
+    futures: bool                  # Futures contract flag (default: False)
+    only_ticker: bool              # Only collect ticker data (default: False)
+    
+    # Relationships:
+    cat_exchange: Exchange         # The exchange this symbol belongs to
+    feeds: List[Feed]              # Strategy feeds using this symbol
+    
+    # Hybrid properties:
+    exchange_name: str             # Exchange name from cat_exchange
+    ohlcv_view: str                # OHLCV view definition
+    
+    # Methods:
+    to_dict() -> dict              # Convert to dictionary
+    from_dict(data: dict) -> Symbol  # Create from dictionary (class method)
+
+Key Features:
+- Auto-refresh from database when symbols not in cache
+- 24-hour TTL for cached data
+- Automatic ticker cleanup when symbols are deleted
+- Exchange name resolution from cat_ex_id
+- Type-safe ORM model integration
+- Backward compatibility with legacy string-based methods
+- Proper error handling and logging
+- Redis key patterns:
+  - Symbol cache: "symbols_list:{exchange_name}"
+  - By exchange ID: "symbols_list:ex_id:{ex_id}"
+  - Associated tickers: "tickers:{exchange_name}"
+  
+Note: Exchange name mapping from cat_ex_id requires proper implementation
+in production environments. Current implementation uses fallback mapping.
 """
 
 TICK_CACHE = """

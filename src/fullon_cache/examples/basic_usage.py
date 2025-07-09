@@ -277,14 +277,102 @@ async def symbol_operations():
     print("\\n=== Symbol Cache Operations ===")
     
     async with SymbolCache() as symbol_cache:
-        # Get all symbols for an exchange
-        symbols = await symbol_cache.get_symbols("binance")
-        print(f"Found {len(symbols)} symbols for Binance")
+        # === NEW ORM-BASED METHODS (RECOMMENDED) ===
+        print("\\n--- Using ORM-based methods ---")
         
-        # Get specific symbol
+        # Import fullon_orm Symbol model
+        from fullon_orm.models import Symbol
+        
+        # Create symbol with ORM model
+        symbol = Symbol(
+            symbol="BTC/USDT",
+            cat_ex_id=1,
+            base="BTC",
+            quote="USDT",
+            decimals=8,
+            updateframe="1h",
+            backtest=30,
+            futures=False,
+            only_ticker=False
+        )
+        
+        print(f"Adding symbol (ORM): {symbol.symbol}")
+        success = await symbol_cache.add_symbol(symbol)
+        print(f"Add successful: {success}")
+        
+        # Check if symbol exists
+        exists = await symbol_cache.symbol_exists(symbol)
+        print(f"Symbol exists: {exists}")
+        
+        # Get symbol using ORM model as search criteria
+        search_symbol = Symbol(symbol="BTC/USDT", cat_ex_id=1)
+        retrieved_symbol = await symbol_cache.get_symbol_by_model(search_symbol)
+        if retrieved_symbol:
+            print(f"Retrieved symbol (ORM): {retrieved_symbol.symbol}")
+            print(f"  Base: {retrieved_symbol.base}, Quote: {retrieved_symbol.quote}")
+            print(f"  Decimals: {retrieved_symbol.decimals}")
+            print(f"  Futures: {retrieved_symbol.futures}")
+        
+        # Update symbol with new data
+        symbol.decimals = 10
+        symbol.backtest = 60
+        print("\\nUpdating symbol with new decimals and backtest values...")
+        success = await symbol_cache.update_symbol(symbol)
+        print(f"Update successful: {success}")
+        
+        # Get all symbols for the same exchange
+        exchange_symbols = await symbol_cache.get_symbols_for_exchange(symbol)
+        print(f"\\nFound {len(exchange_symbols)} symbols on same exchange")
+        
+        # Create another symbol for the same exchange
+        eth_symbol = Symbol(
+            symbol="ETH/USDT",
+            cat_ex_id=1,
+            base="ETH",
+            quote="USDT",
+            decimals=18,
+            updateframe="1h",
+            backtest=30,
+            futures=False,
+            only_ticker=False
+        )
+        
+        await symbol_cache.add_symbol(eth_symbol)
+        print(f"Added second symbol: {eth_symbol.symbol}")
+        
+        # Get updated exchange symbols list
+        exchange_symbols = await symbol_cache.get_symbols_for_exchange(symbol)
+        print(f"Now have {len(exchange_symbols)} symbols on exchange")
+        
+        # Delete symbol using ORM model
+        print("\\nDeleting BTC/USDT symbol...")
+        success = await symbol_cache.delete_symbol_orm(symbol)
+        print(f"Delete successful: {success}")
+        
+        # === LEGACY METHODS (STILL SUPPORTED) ===
+        print("\\n--- Using legacy methods ---")
+        
+        # Get all symbols for an exchange (legacy)
+        symbols = await symbol_cache.get_symbols("binance")
+        print(f"Found {len(symbols)} symbols for Binance (legacy)")
+        
+        # Get specific symbol (legacy)
         btc = await symbol_cache.get_symbol("BTC/USDT", exchange_name="binance")
         if btc:
-            print(f"BTC/USDT - ID: {btc.symbol_id}, Min size: {btc.min_order_size}")
+            print(f"BTC/USDT (legacy) - ID: {btc.symbol_id}")
+            print(f"  Base: {btc.base}, Quote: {btc.quote}")
+        else:
+            print("BTC/USDT not found (expected after deletion)")
+        
+        # Get symbols by exchange ID (legacy)
+        symbols_by_id = await symbol_cache.get_symbols_by_ex_id(1)
+        print(f"Exchange ID 1 has {len(symbols_by_id)} symbols (legacy)")
+        
+        # Delete symbol (legacy method)
+        if symbols_by_id:
+            first_symbol = symbols_by_id[0]
+            print(f"Deleting {first_symbol.symbol} using legacy method...")
+            await symbol_cache.delete_symbol(first_symbol.symbol, exchange_name="binance")
 
 
 async def exchange_operations():

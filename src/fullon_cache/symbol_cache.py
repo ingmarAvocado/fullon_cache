@@ -245,13 +245,196 @@ class SymbolCache:
 
         return symbol_obj
 
+    # New ORM-based methods (Recommended)
+    async def add_symbol(self, symbol: Symbol) -> bool:
+        """Add symbol using fullon_orm.Symbol model.
+        
+        Args:
+            symbol: fullon_orm.Symbol model instance
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get exchange name from symbol's cat_ex_id
+            exchange_name = self._get_exchange_name_from_cat_ex_id(str(symbol.cat_ex_id))
+            if not exchange_name:
+                # Fallback to a default mapping - in production this should be proper mapping
+                exchange_name = "binance"  # This should be resolved from cat_ex_id
+            
+            redis_key = f"symbols_list:{exchange_name}"
+            
+            # Convert Symbol to dict for Redis storage
+            symbol_dict = symbol.to_dict()
+            
+            # Store in Redis hash
+            await self._cache.hset(redis_key, symbol.symbol, json.dumps(symbol_dict))
+            
+            # Set expiration (24 hours)
+            await self._cache.expire(redis_key, 24 * 60 * 60)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to add symbol: {e}")
+            return False
+
+    async def update_symbol(self, symbol: Symbol) -> bool:
+        """Update symbol using fullon_orm.Symbol model.
+        
+        Args:
+            symbol: fullon_orm.Symbol model instance with updates
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get exchange name from symbol's cat_ex_id
+            exchange_name = self._get_exchange_name_from_cat_ex_id(str(symbol.cat_ex_id))
+            if not exchange_name:
+                # Fallback to a default mapping - in production this should be proper mapping
+                exchange_name = "binance"  # This should be resolved from cat_ex_id
+            
+            redis_key = f"symbols_list:{exchange_name}"
+            
+            # Convert Symbol to dict for Redis storage
+            symbol_dict = symbol.to_dict()
+            
+            # Update in Redis hash
+            await self._cache.hset(redis_key, symbol.symbol, json.dumps(symbol_dict))
+            
+            # Set expiration (24 hours)
+            await self._cache.expire(redis_key, 24 * 60 * 60)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update symbol: {e}")
+            return False
+
+    async def delete_symbol_orm(self, symbol: Symbol) -> bool:
+        """Delete symbol using fullon_orm.Symbol model.
+        
+        Args:
+            symbol: fullon_orm.Symbol model instance
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get exchange name from symbol's cat_ex_id
+            exchange_name = self._get_exchange_name_from_cat_ex_id(str(symbol.cat_ex_id))
+            if not exchange_name:
+                # Fallback to a default mapping - in production this should be proper mapping
+                exchange_name = "binance"  # This should be resolved from cat_ex_id
+            
+            # Remove from symbols list
+            symbols_key = f'symbols_list:{exchange_name}'
+            if await self._cache.exists(symbols_key):
+                await self._cache.hdel(symbols_key, symbol.symbol)
+
+            # Also remove from tickers if it exists
+            tickers_key = f'tickers:{exchange_name}'
+            if await self._cache.exists(tickers_key):
+                await self._cache.hdel(tickers_key, symbol.symbol)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to delete symbol: {e}")
+            return False
+
+    async def get_symbol_by_model(self, symbol: Symbol) -> Symbol | None:
+        """Get symbol using fullon_orm.Symbol model as search criteria.
+        
+        Args:
+            symbol: fullon_orm.Symbol model with search criteria
+            
+        Returns:
+            fullon_orm.Symbol model or None if not found
+        """
+        try:
+            # Get exchange name from symbol's cat_ex_id
+            exchange_name = self._get_exchange_name_from_cat_ex_id(str(symbol.cat_ex_id))
+            if not exchange_name:
+                # Fallback to a default mapping - in production this should be proper mapping
+                exchange_name = "binance"  # This should be resolved from cat_ex_id
+            
+            redis_key = f'symbols_list:{exchange_name}'
+            
+            if await self._cache.exists(redis_key):
+                symbol_json = await self._cache.hget(redis_key, symbol.symbol)
+                if symbol_json:
+                    try:
+                        symbol_dict = json.loads(symbol_json)
+                        return Symbol.from_dict(symbol_dict)
+                    except (json.JSONDecodeError, Exception) as e:
+                        logger.error(f"Error parsing symbol {symbol.symbol}: {e}")
+                        return None
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Failed to get symbol: {e}")
+            return None
+
+    async def symbol_exists(self, symbol: Symbol) -> bool:
+        """Check if symbol exists using fullon_orm.Symbol model.
+        
+        Args:
+            symbol: fullon_orm.Symbol model to check
+            
+        Returns:
+            True if symbol exists, False otherwise
+        """
+        try:
+            # Get exchange name from symbol's cat_ex_id
+            exchange_name = self._get_exchange_name_from_cat_ex_id(str(symbol.cat_ex_id))
+            if not exchange_name:
+                # Fallback to a default mapping - in production this should be proper mapping
+                exchange_name = "binance"  # This should be resolved from cat_ex_id
+            
+            redis_key = f'symbols_list:{exchange_name}'
+            
+            if await self._cache.exists(redis_key):
+                symbol_json = await self._cache.hget(redis_key, symbol.symbol)
+                return symbol_json is not None
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to check symbol existence: {e}")
+            return False
+
+    async def get_symbols_for_exchange(self, symbol: Symbol) -> list[Symbol]:
+        """Get all symbols for the same exchange as the provided symbol.
+        
+        Args:
+            symbol: fullon_orm.Symbol model to identify exchange
+            
+        Returns:
+            List of fullon_orm.Symbol models for the same exchange
+        """
+        try:
+            # Get exchange name from symbol's cat_ex_id
+            exchange_name = self._get_exchange_name_from_cat_ex_id(str(symbol.cat_ex_id))
+            if not exchange_name:
+                # Fallback to a default mapping - in production this should be proper mapping
+                exchange_name = "binance"  # This should be resolved from cat_ex_id
+            
+            # Use existing get_symbols method
+            return await self.get_symbols(exchange_name)
+            
+        except Exception as e:
+            logger.error(f"Failed to get symbols for exchange: {e}")
+            return []
+
+    # Legacy methods for backward compatibility
     async def delete_symbol(
         self,
         symbol: str,
         cat_ex_id: str | None = None,
         exchange_name: str | None = None
     ) -> None:
-        """Remove a symbol from the Redis cache.
+        """Remove a symbol from the Redis cache (legacy method).
         
         Args:
             symbol: The symbol to remove
@@ -278,3 +461,11 @@ class SymbolCache:
 
         except Exception as e:
             logger.error(f"Error deleting symbol {symbol}: {e}")
+
+    def _get_exchange_name_from_symbol(self, symbol: Symbol) -> str:
+        """Get exchange name from Symbol model (helper method)."""
+        exchange_name = self._get_exchange_name_from_cat_ex_id(str(symbol.cat_ex_id))
+        if not exchange_name:
+            # Fallback - in production this should be proper mapping
+            exchange_name = "binance"
+        return exchange_name
