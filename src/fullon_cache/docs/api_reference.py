@@ -733,19 +733,57 @@ TRADES_CACHE = """
 TradesCache API Reference
 =========================
 
-Trade queue and status management.
+Trade queue and status management with fullon_orm.Trade model support.
 
 Class: TradesCache()
 --------------------
 
-Inherits from: OrdersCache
+Inherits from: OrdersCache (inherits all methods from AccountCache, TickCache, etc.)
 
-Public Trade Queue:
+New ORM-Based Methods (Recommended):
+    await push_trade(exchange: str, trade: Trade) -> bool
+        Push trade using fullon_orm.Trade model
+        Args:
+            exchange: Exchange name
+            trade: fullon_orm.Trade model instance
+        Returns: True if successful, False otherwise
+        
+    await get_trades(symbol: str, exchange: str) -> List[Trade]
+        Get all trades as fullon_orm.Trade models (destructive read)
+        Args:
+            symbol: Trading symbol (e.g., "BTC/USDT")
+            exchange: Exchange name (e.g., "binance")
+        Returns: List of fullon_orm.Trade models
+        Note: This method removes all trades from the queue
+        
+    await push_user_trade(uid: str, exchange: str, trade: Trade) -> bool
+        Push user trade using fullon_orm.Trade model
+        Args:
+            uid: User ID
+            exchange: Exchange name
+            trade: fullon_orm.Trade model instance
+        Returns: True if successful, False otherwise
+        
+    await pop_user_trade(uid: str, exchange: str, timeout: int = 0) -> Optional[Trade]
+        Pop user trade as fullon_orm.Trade model
+        Args:
+            uid: User ID
+            exchange: Exchange name
+            timeout: Blocking timeout in seconds (0 for non-blocking)
+        Returns: fullon_orm.Trade model or None if not found
+
+Legacy Methods (Backward Compatible):
     await push_trade_list(symbol: str, exchange: str, trade: Union[Dict, Trade] = {}) -> int
-        Push trade to public trade list
+        Push trade to trade list (accepts Trade model or dict)
         
     await get_trades_list(symbol: str, exchange: str) -> List[Dict[str, Any]]
-        Get all trades for symbol/exchange
+        Get all trades as dictionaries (destructive read)
+        
+    await push_my_trades_list(uid: str, exchange: str, trade: Union[Dict, Trade] = {}) -> int
+        Push user trade (accepts Trade model or dict)
+        
+    await pop_my_trade(uid: str, exchange: str, timeout: int = 0) -> Optional[Dict[str, Any]]
+        Pop user trade as dictionary
 
 Trade Status Management:
     await update_trade_status(key: str) -> bool
@@ -760,40 +798,148 @@ Trade Status Management:
     await get_trade_status_keys(prefix: str = "TRADE:STATUS") -> List[str]
         Get all trade status keys
 
-User Trade Operations:
-    await push_my_trades_list(uid: str, exchange: str, trade: Union[Dict, Trade] = {}) -> int
-        Push user's private trade
-        
-    await pop_my_trade(uid: str, exchange: str, timeout: int = 0) -> Optional[Dict[str, Any]]
-        Pop user's trade from queue
-        
+User Trade Status:
     await update_user_trade_status(key: str, timestamp: Optional[datetime] = None) -> bool
         Update user trade status
         
     await delete_user_trade_statuses() -> bool
         Delete all user trade statuses
 
-Example:
+Examples:
+
+New ORM-Based Usage (Recommended):
+    from fullon_orm.models import Trade
+    from datetime import datetime, timezone
+    
     cache = TradesCache()
     
-    # Push public trade
-    await cache.push_trade_list("BTC/USDT", "binance", {
-        "id": "trade123",
-        "price": 50000,
-        "size": 0.1,
-        "side": "buy",
-        "timestamp": datetime.now(timezone.utc)
-    })
+    # Create and push trade with ORM model
+    trade = Trade(
+        trade_id=12345,
+        ex_trade_id="EX_TRD_001",
+        ex_order_id="EX_ORD_001",
+        uid=1,
+        ex_id=1,
+        symbol="BTC/USDT",
+        order_type="limit",
+        side="buy",
+        volume=0.1,
+        price=50000.0,
+        cost=5000.0,
+        fee=5.0,
+        time=datetime.now(timezone.utc)
+    )
+    
+    success = await cache.push_trade("binance", trade)
+    if success:
+        print("Trade pushed successfully")
+    
+    # Get all trades as ORM models (destructive read)
+    trades = await cache.get_trades("BTC/USDT", "binance")
+    print(f"Retrieved {len(trades)} trades")
+    for t in trades:
+        print(f"Trade {t.trade_id}: {t.side} {t.volume} @ ${t.price}")
+    
+    # User trade operations
+    user_trade = Trade(
+        trade_id=67890,
+        ex_trade_id="USER_TRD_001",
+        symbol="ETH/USDT",
+        side="sell",
+        volume=1.0,
+        price=3000.0,
+        cost=3000.0,
+        fee=3.0,
+        time=datetime.now(timezone.utc)
+    )
     
     # Push user trade
-    await cache.push_my_trades_list("user123", "binance", {
-        "id": "mytrade456",
-        "price": 50100,
-        "size": 0.05
-    })
+    success = await cache.push_user_trade("123", "binance", user_trade)
     
-    # Pop user trade
-    trade = await cache.pop_my_trade("user123", "binance", timeout=5)
+    # Pop user trade (blocking for 5 seconds)
+    popped_trade = await cache.pop_user_trade("123", "binance", timeout=5)
+    if popped_trade:
+        print(f"Popped trade: {popped_trade.symbol} {popped_trade.side}")
+
+Legacy Usage (Still Supported):
+    cache = TradesCache()
+    
+    # Push trade with dictionary
+    trade_data = {
+        "trade_id": 12345,
+        "symbol": "BTC/USDT",
+        "side": "buy",
+        "volume": 0.1,
+        "price": 50000.0,
+        "cost": 5000.0,
+        "fee": 5.0
+    }
+    
+    result = await cache.push_trade_list("BTC/USDT", "binance", trade_data)
+    print(f"Push result: {result}")
+    
+    # Get trades as dictionaries
+    trade_dicts = await cache.get_trades_list("BTC/USDT", "binance")
+    for td in trade_dicts:
+        print(f"Trade {td.get('trade_id')}: {td.get('side')} {td.get('volume')}")
+    
+    # User trade operations
+    user_trade_data = {
+        "trade_id": 22222,
+        "symbol": "ADA/USDT",
+        "side": "buy",
+        "volume": 1000.0,
+        "price": 0.5
+    }
+    
+    result = await cache.push_my_trades_list("456", "binance", user_trade_data)
+    popped_data = await cache.pop_my_trade("456", "binance")
+    
+    # Status operations
+    await cache.update_trade_status("binance")
+    status = await cache.get_trade_status("binance")
+
+fullon_orm.Trade Model Properties:
+    trade_id: Optional[int]        # Internal trade ID
+    ex_trade_id: Optional[str]     # Exchange trade ID
+    ex_order_id: Optional[str]     # Exchange order ID
+    uid: Optional[int]             # User ID
+    ex_id: Optional[int]           # Exchange account ID
+    symbol: Optional[str]          # Trading pair (e.g., "BTC/USDT")
+    order_type: Optional[str]      # Order type that generated this trade
+    side: Optional[str]            # 'buy' or 'sell'
+    volume: Optional[float]        # Trade volume
+    price: Optional[float]         # Trade price
+    cost: Optional[float]          # Total cost (volume * price)
+    fee: Optional[float]           # Trading fee
+    cur_volume: Optional[float]    # Current cumulative volume
+    cur_avg_price: Optional[float] # Current average price
+    cur_avg_cost: Optional[float]  # Current average cost
+    cur_fee: Optional[float]       # Current cumulative fee
+    roi: Optional[float]           # Return on investment
+    roi_pct: Optional[float]       # ROI percentage
+    total_fee: Optional[float]     # Total fees paid
+    leverage: Optional[float]      # Leverage used
+    time: Optional[datetime]       # Trade timestamp
+    
+    # Methods:
+    to_dict() -> dict             # Convert to dictionary
+    from_dict(data: dict) -> Trade  # Create from dictionary (class method)
+
+Key Features:
+- Automatic symbol normalization (removes "/" for Redis keys)
+- FIFO trade queues using Redis lists
+- Destructive read operations (get operations clear the queue)
+- User-specific trade queues for personalized data
+- Trade status timestamp tracking
+- Backward compatibility with legacy dict-based methods
+- Type-safe ORM model integration
+- Proper error handling and logging
+- Redis key patterns:
+  - Public trades: "trades:{exchange}:{normalized_symbol}"
+  - User trades: "user_trades:{uid}:{exchange}"
+  - Trade status: "TRADE:STATUS:{key}"
+  - User trade status: "USER_TRADE:STATUS:{key}"
 """
 
 OHLCV_CACHE = """

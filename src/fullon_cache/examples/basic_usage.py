@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from fullon_cache import (
-    TickCache, OrdersCache, AccountCache, 
+    TickCache, OrdersCache, AccountCache, TradesCache,
     ExchangeCache, SymbolCache
 )
 
@@ -185,18 +185,79 @@ async def account_operations():
     account_cache = AccountCache()
     
     try:
-        # Update positions
-        positions = {
-            "BTC/USDT": {"size": 0.5, "cost": 25000.0},
-            "ETH/USDT": {"size": 10.0, "cost": 20000.0}
+        # === NEW ORM-BASED METHODS (RECOMMENDED) ===
+        print("\\n--- Using ORM-based methods ---")
+        
+        # Import fullon_orm Position model
+        from fullon_orm.models import Position
+        import time
+        
+        # Create positions with ORM models
+        positions = [
+            Position(
+                symbol="BTC/USDT",
+                cost=25000.0,
+                volume=0.5,
+                fee=25.0,
+                count=1.0,
+                price=50000.0,
+                timestamp=time.time(),
+                ex_id="123",
+                side="long"
+            ),
+            Position(
+                symbol="ETH/USDT",
+                cost=20000.0,
+                volume=10.0,
+                fee=20.0,
+                count=1.0,
+                price=2000.0,
+                timestamp=time.time(),
+                ex_id="123",
+                side="long"
+            )
+        ]
+        
+        print("Updating positions with ORM models...")
+        success = await account_cache.upsert_positions(123, positions)
+        print(f"Update successful: {success}")
+        
+        # Get specific position as ORM model
+        position = await account_cache.get_position("BTC/USDT", "123")
+        print(f"BTC position (ORM) - Volume: {position.volume}, Cost: {position.cost}")
+        
+        # Upsert single position
+        new_position = Position(
+            symbol="ADA/USDT",
+            cost=1000.0,
+            volume=1000.0,
+            fee=1.0,
+            count=1.0,
+            price=1.0,
+            timestamp=time.time(),
+            ex_id="123",
+            side="long"
+        )
+        success = await account_cache.upsert_position(new_position)
+        print(f"Single position upsert successful: {success}")
+        
+        # Get all positions as ORM models
+        all_positions = await account_cache.get_all_positions()
+        print(f"Total positions (ORM): {len(all_positions)}")
+        for pos in all_positions:
+            print(f"  {pos.symbol}: Volume={pos.volume}, Cost={pos.cost}")
+        
+        # === LEGACY METHODS (STILL SUPPORTED) ===
+        print("\\n--- Using legacy methods ---")
+        
+        # Update positions using legacy dict format
+        positions_dict = {
+            "BTC/USDT": {"cost": 25000.0, "volume": 0.5, "fee": 25.0, "price": 50000.0, "timestamp": time.time()},
+            "ETH/USDT": {"cost": 20000.0, "volume": 10.0, "fee": 20.0, "price": 2000.0, "timestamp": time.time()}
         }
         
-        print("Updating positions...")
-        await account_cache.upsert_positions(123, positions)
-        
-        # Get specific position
-        position = await account_cache.get_position("BTC/USDT", "123")
-        print(f"BTC position - Size: {position.size}, Cost: {position.cost}")
+        print("Updating positions with legacy dict format...")
+        await account_cache.upsert_positions(123, positions_dict)
         
         # Update account data
         account_data = {
@@ -206,10 +267,6 @@ async def account_operations():
         }
         await account_cache.upsert_user_account(123, account_data)
         print("Updated account data")
-        
-        # Get all positions
-        all_positions = await account_cache.get_all_positions()
-        print(f"Total positions across all accounts: {len(all_positions)}")
         
     finally:
         await account_cache.close()
@@ -250,6 +307,124 @@ async def exchange_operations():
         await exchange_cache.close()
 
 
+async def trade_operations():
+    """Demonstrate trade cache operations."""
+    print("\\n=== Trade Cache Operations ===")
+    
+    trades_cache = TradesCache()
+    
+    try:
+        # === NEW ORM-BASED METHODS (RECOMMENDED) ===
+        print("\\n--- Using ORM-based methods ---")
+        
+        # Import fullon_orm Trade model
+        from fullon_orm.models import Trade
+        from datetime import datetime, timezone
+        
+        # Create trade with ORM model
+        trade = Trade(
+            trade_id=12345,
+            ex_trade_id="EX_TRD_001",
+            ex_order_id="EX_ORD_001",
+            uid=1,
+            ex_id=1,
+            symbol="BTC/USDT",
+            order_type="limit",
+            side="buy",
+            volume=0.1,
+            price=50000.0,
+            cost=5000.0,
+            fee=5.0,
+            time=datetime.now(timezone.utc)
+        )
+        
+        print(f"Pushing trade (ORM): {trade.symbol} {trade.side} {trade.volume}")
+        success = await trades_cache.push_trade("binance", trade)
+        print(f"Push successful: {success}")
+        
+        # Get all trades as ORM models (destructive read)
+        trades = await trades_cache.get_trades("BTC/USDT", "binance")
+        print(f"Retrieved {len(trades)} trades (ORM)")
+        for t in trades:
+            print(f"  Trade {t.trade_id}: {t.side} {t.volume} @ ${t.price}")
+        
+        # User trade operations
+        user_trade = Trade(
+            trade_id=67890,
+            ex_trade_id="USER_TRD_001",
+            symbol="ETH/USDT",
+            side="sell",
+            volume=1.0,
+            price=3000.0,
+            cost=3000.0,
+            fee=3.0,
+            time=datetime.now(timezone.utc)
+        )
+        
+        print("\\nPushing user trade (ORM)...")
+        success = await trades_cache.push_user_trade("123", "binance", user_trade)
+        print(f"User trade push successful: {success}")
+        
+        # Pop user trade
+        popped_trade = await trades_cache.pop_user_trade("123", "binance")
+        if popped_trade:
+            print(f"Popped user trade (ORM): {popped_trade.symbol} {popped_trade.side}")
+        
+        # === LEGACY METHODS (STILL SUPPORTED) ===
+        print("\\n--- Using legacy methods ---")
+        
+        # Push trade using legacy dict format
+        trade_data = {
+            "trade_id": 11111,
+            "symbol": "BTC/USDT",
+            "side": "buy",
+            "volume": 0.05,
+            "price": 49000.0,
+            "cost": 2450.0,
+            "fee": 2.45
+        }
+        
+        print(f"Pushing trade (legacy): {trade_data['symbol']} {trade_data['side']}")
+        result = await trades_cache.push_trade_list("BTC/USDT", "binance", trade_data)
+        print(f"Legacy push result: {result}")
+        
+        # Get trades as dict list (destructive read)
+        trade_dicts = await trades_cache.get_trades_list("BTC/USDT", "binance")
+        print(f"Retrieved {len(trade_dicts)} trades (legacy)")
+        for td in trade_dicts:
+            print(f"  Trade {td.get('trade_id', 'N/A')}: {td.get('side', 'N/A')} {td.get('volume', 0)} @ ${td.get('price', 0)}")
+        
+        # User trade operations (legacy)
+        user_trade_data = {
+            "trade_id": 22222,
+            "symbol": "ADA/USDT",
+            "side": "buy",
+            "volume": 1000.0,
+            "price": 0.5,
+            "cost": 500.0,
+            "fee": 0.5
+        }
+        
+        print("\\nPushing user trade (legacy)...")
+        result = await trades_cache.push_my_trades_list("456", "binance", user_trade_data)
+        print(f"User trade push result: {result}")
+        
+        # Pop user trade (legacy)
+        popped_data = await trades_cache.pop_my_trade("456", "binance")
+        if popped_data:
+            print(f"Popped user trade (legacy): {popped_data.get('symbol', 'N/A')} {popped_data.get('side', 'N/A')}")
+        
+        # Status operations
+        print("\\nTrade status operations...")
+        await trades_cache.update_trade_status("binance")
+        status = await trades_cache.get_trade_status("binance")
+        if status:
+            print(f"Trade status for binance: {status}")
+        
+    finally:
+        await trades_cache.close()
+
+
 async def main():
     """Run all examples."""
     print("Fullon Cache Basic Usage Examples")
@@ -258,6 +433,7 @@ async def main():
     await ticker_operations()
     await order_operations()
     await account_operations()
+    await trade_operations()
     await symbol_operations()
     await exchange_operations()
     

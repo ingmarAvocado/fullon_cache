@@ -353,3 +353,193 @@ class TradesCache:
         except Exception as e:
             logger.error(f"Failed to get trades list: {e}")
             return []
+
+    # New ORM-based methods (Recommended)
+    async def push_trade(self, exchange: str, trade: Trade) -> bool:
+        """Push trade using fullon_orm.Trade model.
+        
+        Args:
+            exchange: Exchange name
+            trade: fullon_orm.Trade model
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Normalize symbol
+            normalized_symbol = trade.symbol.replace("/", "")
+            redis_key = f"trades:{exchange}:{normalized_symbol}"
+            
+            # Convert Trade to dict for Redis storage
+            trade_dict = trade.to_dict()
+            
+            # Push to list
+            async with self._cache._redis_context() as redis_client:
+                await redis_client.rpush(redis_key, json.dumps(trade_dict))
+            
+            # Update trade status
+            await self.update_trade_status(exchange)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to push trade: {e}")
+            return False
+
+    async def get_trades(self, symbol: str, exchange: str) -> list[Trade]:
+        """Get all trades as fullon_orm.Trade models (destructive read).
+        
+        Args:
+            symbol: Trading symbol
+            exchange: Exchange name
+            
+        Returns:
+            List of fullon_orm.Trade models
+        """
+        try:
+            # Normalize symbol
+            normalized_symbol = symbol.replace("/", "")
+            redis_key = f"trades:{exchange}:{normalized_symbol}"
+
+            async with self._cache._redis_context() as redis_client:
+                # Get all trades
+                trades_json = await redis_client.lrange(redis_key, 0, -1)
+                # Delete the list
+                await redis_client.delete(redis_key)
+
+            # Parse trades into Trade models
+            trades = []
+            for trade_json in trades_json:
+                try:
+                    trade_dict = json.loads(trade_json)
+                    trade = Trade.from_dict(trade_dict)
+                    trades.append(trade)
+                except (json.JSONDecodeError, Exception) as e:
+                    logger.warning(f"Failed to parse trade: {e}")
+
+            return trades
+        except Exception as e:
+            logger.error(f"Failed to get trades: {e}")
+            return []
+
+    async def push_user_trade(self, uid: str, exchange: str, trade: Trade) -> bool:
+        """Push user trade using fullon_orm.Trade model.
+        
+        Args:
+            uid: User ID
+            exchange: Exchange name
+            trade: fullon_orm.Trade model
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Convert Trade to dict for Redis storage
+            trade_dict = trade.to_dict()
+            
+            redis_key = f"user_trades:{uid}:{exchange}"
+            async with self._cache._redis_context() as redis_client:
+                await redis_client.rpush(redis_key, json.dumps(trade_dict))
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to push user trade: {e}")
+            return False
+
+    async def pop_user_trade(self, uid: str, exchange: str, timeout: int = 0) -> Trade | None:
+        """Pop user trade as fullon_orm.Trade model.
+        
+        Args:
+            uid: User ID
+            exchange: Exchange name
+            timeout: Blocking timeout in seconds
+            
+        Returns:
+            fullon_orm.Trade model or None if not found
+        """
+        try:
+            redis_key = f"user_trades:{uid}:{exchange}"
+
+            async with self._cache._redis_context() as redis_client:
+                if timeout and timeout > 0:
+                    # Blocking pop
+                    result = await redis_client.blpop(redis_key, timeout=timeout)
+                    if result:
+                        _, trade_json = result
+                        trade_dict = json.loads(trade_json)
+                        return Trade.from_dict(trade_dict)
+                else:
+                    # Non-blocking pop
+                    trade_json = await redis_client.lpop(redis_key)
+                    if trade_json:
+                        trade_dict = json.loads(trade_json)
+                        return Trade.from_dict(trade_dict)
+
+            return None
+        except (json.JSONDecodeError, Exception) as e:
+            if "TimeoutError" not in str(e):
+                logger.error(f"Failed to pop user trade: {e}")
+            return None
+
+    # Legacy methods for backward compatibility
+    async def push_trade_list_legacy(
+        self,
+        symbol: str,
+        exchange: str,
+        trade: dict = {}
+    ) -> int:
+        """Legacy method - use push_trade() instead."""
+        try:
+            # Convert dict to Trade model if needed
+            if trade:
+                trade_model = Trade.from_dict(trade)
+                success = await self.push_trade(exchange, trade_model)
+                return 1 if success else 0
+            return 0
+        except Exception as e:
+            logger.error(f"Failed to push trade list (legacy): {e}")
+            return 0
+
+    async def get_trades_list_legacy(
+        self,
+        symbol: str,
+        exchange: str
+    ) -> list[dict]:
+        """Legacy method - use get_trades() instead."""
+        try:
+            trades = await self.get_trades(symbol, exchange)
+            return [trade.to_dict() for trade in trades]
+        except Exception as e:
+            logger.error(f"Failed to get trades list (legacy): {e}")
+            return []
+
+    async def push_my_trades_list_legacy(
+        self,
+        uid: str,
+        exchange: str,
+        trade: dict = {}
+    ) -> int:
+        """Legacy method - use push_user_trade() instead."""
+        try:
+            if trade:
+                trade_model = Trade.from_dict(trade)
+                success = await self.push_user_trade(uid, exchange, trade_model)
+                return 1 if success else 0
+            return 0
+        except Exception as e:
+            logger.error(f"Failed to push user trade (legacy): {e}")
+            return 0
+
+    async def pop_my_trade_legacy(
+        self,
+        uid: str,
+        exchange: str,
+        timeout: int = 0
+    ) -> dict | None:
+        """Legacy method - use pop_user_trade() instead."""
+        try:
+            trade = await self.pop_user_trade(uid, exchange, timeout)
+            return trade.to_dict() if trade else None
+        except Exception as e:
+            if "TimeoutError" not in str(e):
+                logger.error(f"Failed to pop user trade (legacy): {e}")
+            return None
