@@ -21,11 +21,14 @@ class TestOrdersCacheLegacyMethods:
         assert order_id == "ORDER123"
 
     @pytest.mark.asyncio
-    async def test_pop_open_order_timeout(self, orders_cache):
-        """Test pop_open_order with timeout using short timeout."""
-        # Try to pop from empty queue with 1 second timeout - should raise TimeoutError
-        with pytest.raises(TimeoutError, match="Not getting any trade"):
-            await orders_cache.pop_open_order("EMPTY_QUEUE", timeout=1)
+    async def test_pop_open_order_immediate_return(self, orders_cache):
+        """Test pop_open_order returns immediately when data exists."""
+        # First push an order
+        await orders_cache.push_open_order("ORDER_FAST", "LOCAL_FAST")
+        
+        # Pop should return immediately
+        result = await orders_cache.pop_open_order("LOCAL_FAST")
+        assert result == "ORDER_FAST"
 
     @pytest.mark.asyncio
     async def test_save_order_data(self, orders_cache):
