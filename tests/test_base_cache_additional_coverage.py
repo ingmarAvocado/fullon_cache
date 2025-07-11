@@ -1,5 +1,6 @@
 """Additional tests to increase BaseCache coverage."""
 
+import asyncio
 from unittest.mock import patch
 
 import pytest
@@ -36,21 +37,60 @@ class TestBaseCacheAdditionalCoverage:
             assert "Failed to get set cardinality" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_scan_iter_method(self):
+    async def test_scan_iter_method(self, worker_id):
         """Test scan_iter method."""
         cache = BaseCache()
 
-        # Set some keys
-        await cache.set("test:1", "value1")
-        await cache.set("test:2", "value2")
-        await cache.set("other:1", "value3")
+        # Use worker-specific keys with timestamp to avoid collisions
+        import time
+        timestamp = str(time.time()).replace('.', '')
+        key_prefix = f"test_{worker_id}_{timestamp}"
+        keys_to_set = [f"{key_prefix}:1", f"{key_prefix}:2"]
+        other_key = f"other_{worker_id}_{timestamp}:1"
+        
+        try:
+            # Set some keys with retry logic for parallel execution
+            for attempt in range(3):
+                try:
+                    await cache.set(keys_to_set[0], "value1")
+                    await cache.set(keys_to_set[1], "value2")
+                    await cache.set(other_key, "value3")
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(0.1)
 
-        # Scan for keys
-        keys = []
-        async for key in cache.scan_iter("test:*"):
-            keys.append(key)
+            # Wait a bit to ensure keys are saved
+            await asyncio.sleep(0.05)
+            
+            # Scan for keys with retry logic
+            keys = []
+            for attempt in range(3):
+                try:
+                    keys = []
+                    async for key in cache.scan_iter(f"{key_prefix}:*"):
+                        keys.append(key)
+                    
+                    # If we got the expected keys, break
+                    if len(keys) >= 2:
+                        break
+                        
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(0.1)
 
-        assert len(keys) >= 2
+            # Should find both keys we set
+            assert len(keys) >= 2, f"Expected at least 2 keys, got {len(keys)}: {keys}"
+            
+        finally:
+            # Cleanup
+            try:
+                await cache.delete(*keys_to_set)
+                await cache.delete(other_key)
+            except:
+                pass
 
     @pytest.mark.asyncio
     async def test_subscribe_error_handling(self):

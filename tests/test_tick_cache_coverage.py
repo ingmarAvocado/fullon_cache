@@ -28,7 +28,7 @@ class TestTickCacheCoverage:
 
             # Test get_ticker with Redis error
             result = await cache.get_ticker("BTC/USDT", "binance")
-            assert result == (0, None)
+            assert result is None
 
     @pytest.mark.asyncio
     async def test_update_ticker_edge_cases(self):

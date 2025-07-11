@@ -296,7 +296,7 @@ New ORM-Based Methods (Recommended):
             symbol: fullon_orm.Symbol model instance with updates
         Returns: True if successful, False otherwise
         
-    await delete_symbol_orm(symbol: Symbol) -> bool
+    await delete_symbol(symbol: Symbol) -> bool
         Delete symbol using fullon_orm.Symbol model
         Args:
             symbol: fullon_orm.Symbol model instance
@@ -333,7 +333,7 @@ Legacy Methods (Backward Compatible):
                     exchange_name: Optional[str] = None, loop: int = 0) -> Optional[Symbol]
         Get specific symbol by name and exchange
         
-    await delete_symbol(symbol: str, cat_ex_id: Optional[str] = None,
+    await delete_symbol_legacy(symbol: str, cat_ex_id: Optional[str] = None,
                        exchange_name: Optional[str] = None) -> None
         Delete symbol from cache (also removes associated tickers)
 
@@ -392,7 +392,7 @@ New ORM-Based Usage (Recommended):
     print(f"Found {len(exchange_symbols)} symbols on same exchange")
     
     # Delete symbol using ORM model
-    success = await cache.delete_symbol_orm(symbol)
+    success = await cache.delete_symbol(symbol)
     if success:
         print("Symbol deleted successfully")
 
@@ -414,7 +414,7 @@ Legacy Usage (Still Supported):
         print(f"Exchange ID 1 has {len(symbols_by_id)} symbols")
         
         # Delete symbol (legacy method)
-        await cache.delete_symbol("BTC/USDT", exchange_name="binance")
+        await cache.delete_symbol_legacy("BTC/USDT", exchange_name="binance")
 
 fullon_orm.Symbol Model Properties:
     symbol_id: Optional[int]       # Auto-incrementing primary key
@@ -469,21 +469,21 @@ Class: TickCache()
 Inherits from: SymbolCache
 
 New ORM-Based Methods (Recommended):
-    await update_ticker_orm(exchange: str, ticker: Tick) -> bool
+    await update_ticker(exchange: str, ticker: Tick) -> bool
         Update ticker using fullon_orm.Tick model
         Args:
             exchange: Exchange name
             ticker: fullon_orm.Tick model instance
         Returns: True if successful, False otherwise
         
-    await get_ticker_orm(symbol: str, exchange: str) -> Optional[Tick]
+    await get_ticker(symbol: str, exchange: str) -> Optional[Tick]
         Get ticker as fullon_orm.Tick model
         Args:
             symbol: Trading symbol (e.g., "BTC/USDT")
             exchange: Exchange name (e.g., "binance")
         Returns: fullon_orm.Tick model or None if not found
         
-    await get_price_tick_orm(symbol: str, exchange: Optional[str] = None) -> Optional[Tick]
+    await get_price_tick(symbol: str, exchange: Optional[str] = None) -> Optional[Tick]
         Get full tick data (not just price) as fullon_orm.Tick model
         Args:
             symbol: Trading symbol
@@ -491,10 +491,10 @@ New ORM-Based Methods (Recommended):
         Returns: fullon_orm.Tick model or None if not found
 
 Legacy Methods (Backward Compatible):
-    await update_ticker(symbol: str, exchange: str, data: Dict[str, Any]) -> int
+    await update_ticker_legacy(symbol: str, exchange: str, data: Dict[str, Any]) -> int
         Update ticker data and publish to subscribers
         
-    await get_ticker(symbol: str, exchange: Optional[str] = None) -> Tuple[Optional[float], Optional[str]]
+    await get_ticker_legacy(symbol: str, exchange: Optional[str] = None) -> Tuple[Optional[float], Optional[str]]
         Get ticker price and timestamp
         
     await get_ticker_any(symbol: str) -> float
@@ -542,18 +542,18 @@ New ORM-Based Usage (Recommended):
         last=50000.5
     )
     
-    success = await cache.update_ticker_orm("binance", tick)
+    success = await cache.update_ticker("binance", tick)
     if success:
         print("Ticker updated successfully")
     
     # Get ticker as ORM model
-    ticker = await cache.get_ticker_orm("BTC/USDT", "binance")
+    ticker = await cache.get_ticker("BTC/USDT", "binance")
     if ticker:
         print(f"Price: {ticker.price}, Volume: {ticker.volume}")
         print(f"Spread: {ticker.spread}, Spread %: {ticker.spread_percentage}")
     
     # Get price tick from any exchange
-    price_tick = await cache.get_price_tick_orm("BTC/USDT")
+    price_tick = await cache.get_price_tick("BTC/USDT")
     if price_tick:
         print(f"Best price: {price_tick.price} on {price_tick.exchange}")
 
@@ -561,7 +561,7 @@ Legacy Usage (Still Supported):
     cache = TickCache()
     
     # Update ticker with dictionary
-    await cache.update_ticker("BTC/USDT", "binance", {
+    await cache.update_ticker_legacy("BTC/USDT", "binance", {
         "price": 50000.0,
         "bid": 49999.0,
         "ask": 50001.0,
@@ -577,7 +577,7 @@ Legacy Usage (Still Supported):
     any_price = await cache.get_ticker_any("BTC/USDT")
     
     # Get ticker as tuple
-    price, timestamp = await cache.get_ticker("BTC/USDT", "binance")
+    price, timestamp = await cache.get_ticker_legacy("BTC/USDT", "binance")
 
 fullon_orm.Tick Model Properties:
     symbol: str          # Trading pair (e.g., "BTC/USDT")
@@ -610,12 +610,12 @@ Class: AccountCache()
 Inherits from: TickCache
 
 New ORM-Based Methods (Recommended):
-    await upsert_positions(ex_id: int, positions: List[Position] | Dict[str, Dict[str, float]], 
+    await upsert_positions(ex_id: int, positions: List[Position], 
                           update_date: bool = False) -> bool
-        Upsert positions using fullon_orm.Position models or legacy dict format
+        Upsert positions using fullon_orm.Position models
         Args:
             ex_id: Exchange ID
-            positions: List of fullon_orm.Position models OR legacy dict format
+            positions: List of fullon_orm.Position models
             update_date: If True, only update timestamp for existing positions
         Returns: True if successful, False otherwise
         
@@ -749,7 +749,7 @@ Legacy Usage (Still Supported):
         "ETH/USDT": {"cost": 20000.0, "volume": 10.0, "fee": 20.0, "price": 2000.0, "timestamp": time.time()}
     }
     
-    await cache.upsert_positions(123, positions_dict)  # Union type accepts both formats
+    await cache.upsert_positions_legacy(123, positions_dict)  # Use legacy method for dict format
     
     # Get specific position (always returns Position model)
     position = await cache.get_position("BTC/USDT", "123")
@@ -791,9 +791,8 @@ Key Features:
   - Positions: "account_positions" (hash with ex_id as key)
   - Accounts: "accounts" (hash with ex_id as key)
 
-Note: The upsert_positions() method uses union types to accept both
-List[Position] and Dict[str, Dict[str, float]] for maximum flexibility
-while encouraging ORM model usage.
+Note: The upsert_positions() method now only accepts List[Position] for type safety.
+Use upsert_positions_legacy() for the old dict format or convert dicts to Position models.
 """
 
 ORDERS_CACHE = """

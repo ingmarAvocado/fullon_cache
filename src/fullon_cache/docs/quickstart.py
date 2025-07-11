@@ -23,52 +23,79 @@ Basic Setup
     REDIS_MAX_CONNECTIONS=50
     REDIS_SOCKET_TIMEOUT=5
 
-2. Import and use the cache:
+2. Import and use the cache with fullon_orm models:
 
-    from fullon_cache import TickCache, OrdersCache
+    from fullon_cache import TickCache, OrdersCache, AccountCache
+    from fullon_orm.models import Tick, Position
     import asyncio
+    import time
     
     async def main():
         # Initialize caches
         tick_cache = TickCache()
         orders_cache = OrdersCache()
+        account_cache = AccountCache()
         
-        # Store ticker data
-        await tick_cache.update_ticker(
+        # Store ticker data using fullon_orm.Tick model
+        tick = Tick(
             symbol="BTC/USDT",
-            exchange="binance", 
-            data={
-                "bid": 50000.0,
-                "ask": 50001.0,
-                "last": 50000.5,
-                "volume": 1234.56,
-                "timestamp": "2024-01-01T00:00:00Z"
-            }
+            exchange="binance",
+            price=50000.0,
+            volume=1234.56,
+            time=time.time(),
+            bid=49999.0,
+            ask=50001.0,
+            last=50000.5
         )
         
-        # Retrieve ticker price
-        price, timestamp = await tick_cache.get_ticker("BTC/USDT", "binance")
-        print(f"BTC price: ${price}")
+        await tick_cache.update_ticker("binance", tick)
         
-        # Get price from any exchange
-        any_price = await tick_cache.get_ticker_any("BTC/USDT")
-        print(f"BTC price (any exchange): ${any_price}")
+        # Retrieve ticker as fullon_orm.Tick object
+        cached_tick = await tick_cache.get_ticker("BTC/USDT", "binance")
+        print(f"Current BTC price: ${cached_tick.price}")
+        
+        # Work with positions using fullon_orm.Position model
+        position = Position(
+            symbol="BTC/USDT",
+            cost=5000.0,
+            volume=0.1,
+            fee=5.0,
+            price=50000.0,
+            timestamp=time.time(),
+            ex_id="binance"
+        )
+        
+        await account_cache.upsert_positions(123, [position])
+        print(f"Position stored for BTC/USDT: {position.volume} BTC")
+        
+        # Get price from ticker
+        current_price = await tick_cache.get_price("BTC/USDT", "binance")
+        print(f"Current BTC price: ${current_price}")
         
         # Work with order queues
         await orders_cache.push_open_order("order_12345", "local_order_456")
         
-        # Save order data
-        await orders_cache.save_order_data("binance", "order_12345", {
-            "symbol": "BTC/USDT",
-            "side": "buy",
-            "size": 0.1,
-            "price": 49000
-        })
+        # Create order with fullon_orm.Order model
+        from fullon_orm.models import Order
+        order = Order(
+            ex_order_id="order_12345",
+            symbol="BTC/USDT",
+            side="buy",
+            volume=0.1,
+            price=49000,
+            order_type="limit",
+            status="open",
+            exchange="binance",
+            timestamp=time.time()
+        )
         
-        # Get order status
-        order = await orders_cache.get_order_status("binance", "order_12345")
-        if order:
-            print(f"Order status: {order}")
+        # Save order using ORM model
+        await orders_cache.save_order("binance", order)
+        
+        # Get order status as fullon_orm.Order object
+        retrieved_order = await orders_cache.get_order("binance", "order_12345")
+        if retrieved_order:
+            print(f"Order status: {retrieved_order.status} - {retrieved_order.symbol} @ ${retrieved_order.price}")
     
     # Run the async function
     asyncio.run(main())
@@ -98,29 +125,146 @@ Subscribe to real-time price updates using pub/sub:
 
 Working with Positions
 ----------------------
-Track user positions and accounts:
+Track user positions using fullon_orm.Position models:
 
     from fullon_cache import AccountCache
+    from fullon_orm.models import Position
+    import time
     
     account_cache = AccountCache()
     
-    # Update positions
-    await account_cache.upsert_positions(
-        ex_id=123,  # Exchange account ID
-        positions={
-            "BTC/USDT": {"size": 0.5, "cost": 25000.0},
-            "ETH/USDT": {"size": 10.0, "cost": 20000.0}
-        }
-    )
+    # Create positions using fullon_orm.Position models
+    positions = [
+        Position(
+            symbol="BTC/USDT",
+            cost=25000.0,
+            volume=0.5,
+            fee=10.0,
+            price=50000.0,
+            timestamp=time.time(),
+            ex_id="123"
+        ),
+        Position(
+            symbol="ETH/USDT",
+            cost=20000.0,
+            volume=10.0,
+            fee=8.0,
+            price=2000.0,
+            timestamp=time.time(),
+            ex_id="123"
+        )
+    ]
     
-    # Get specific position
+    # Update positions with ORM models
+    await account_cache.upsert_positions(123, positions)
+    
+    # Get specific position as fullon_orm.Position object
     position = await account_cache.get_position("BTC/USDT", "123")
-    print(f"BTC position: {position.size} @ cost {position.cost}")
+    print(f"BTC position: {position.volume} @ cost {position.cost}")
     
-    # Get all positions
+    # Get all positions as fullon_orm.Position objects
     all_positions = await account_cache.get_all_positions()
     for pos in all_positions:
-        print(f"{pos.symbol}: {pos.size} units")
+        print(f"{pos.symbol}: {pos.volume} units @ ${pos.price}")
+
+Working with Trades
+-------------------
+Manage trade data using fullon_orm.Trade models:
+
+    from fullon_cache import TradesCache
+    from fullon_orm.models import Trade
+    import time
+    
+    trades_cache = TradesCache()
+    
+    # Create trade using fullon_orm.Trade model
+    trade = Trade(
+        trade_id="TRD_001",
+        symbol="BTC/USDT",
+        side="buy",
+        volume=0.1,
+        price=50000.0,
+        cost=5000.0,
+        fee=5.0,
+        time=time.time(),
+        ex_id="binance",
+        ex_order_id="ORD_001"
+    )
+    
+    # Push trade to cache
+    await trades_cache.push_trade("binance", trade)
+    
+    # Get all trades (destructive read)
+    trades = await trades_cache.get_trades("BTC/USDT", "binance")
+    for t in trades:
+        print(f"Trade: {t.side} {t.volume} {t.symbol} @ ${t.price}")
+    
+    # User-specific trade operations
+    user_trade = Trade(
+        trade_id="USER_TRD_001",
+        symbol="ETH/USDT",
+        side="sell",
+        volume=1.0,
+        price=3000.0,
+        cost=3000.0,
+        fee=3.0,
+        time=time.time(),
+        uid="user_123"
+    )
+    
+    # Push user trade
+    await trades_cache.push_user_trade("user_123", "binance", user_trade)
+    
+    # Pop user trade
+    popped_trade = await trades_cache.pop_user_trade("user_123", "binance")
+    if popped_trade:
+        print(f"User trade: {popped_trade.side} {popped_trade.volume} {popped_trade.symbol}")
+
+Working with Symbols
+--------------------
+Manage symbol metadata using fullon_orm.Symbol models:
+
+    from fullon_cache import SymbolCache
+    from fullon_orm.models import Symbol
+    
+    symbol_cache = SymbolCache()
+    
+    # Create symbol using fullon_orm.Symbol model
+    symbol = Symbol(
+        symbol="BTC/USDT",
+        base="BTC",
+        quote="USDT",
+        cat_ex_id=1,
+        decimals=8,
+        updateframe="1h",
+        backtest=30,
+        futures=False,
+        only_ticker=False
+    )
+    
+    # Add symbol to cache
+    await symbol_cache.add_symbol(symbol)
+    
+    # Get symbol using model as search criteria
+    search_symbol = Symbol(symbol="BTC/USDT", cat_ex_id=1)
+    retrieved_symbol = await symbol_cache.get_symbol_by_model(search_symbol)
+    if retrieved_symbol:
+        print(f"Symbol: {retrieved_symbol.symbol} - Base: {retrieved_symbol.base}")
+    
+    # Check if symbol exists
+    exists = await symbol_cache.symbol_exists(symbol)
+    print(f"Symbol exists: {exists}")
+    
+    # Get all symbols for the same exchange
+    exchange_symbols = await symbol_cache.get_symbols_for_exchange(symbol)
+    print(f"Exchange has {len(exchange_symbols)} symbols")
+    
+    # Update symbol
+    symbol.decimals = 10
+    await symbol_cache.update_symbol(symbol)
+    
+    # Delete symbol
+    await symbol_cache.delete_symbol(symbol)
 
 Bot Coordination
 ----------------
@@ -246,6 +390,108 @@ Best Practices
 5. Use pub/sub for real-time data
 6. Monitor Redis memory usage
 7. Use separate Redis DBs for testing
+
+Advanced Integration
+--------------------
+Combine multiple caches for complex trading workflows:
+
+    from fullon_cache import (
+        SymbolCache, TickCache, OrdersCache, 
+        TradesCache, AccountCache, BotCache
+    )
+    from fullon_orm.models import Symbol, Tick, Order, Trade, Position
+    import time
+    
+    # Initialize all caches
+    symbol_cache = SymbolCache()
+    tick_cache = TickCache()
+    orders_cache = OrdersCache()
+    trades_cache = TradesCache()
+    account_cache = AccountCache()
+    bot_cache = BotCache()
+    
+    try:
+        # 1. Setup symbol
+        symbol = Symbol(
+            symbol="BTC/USDT",
+            base="BTC",
+            quote="USDT",
+            cat_ex_id=1,
+            decimals=8
+        )
+        await symbol_cache.add_symbol(symbol)
+        
+        # 2. Update market data
+        tick = Tick(
+            symbol="BTC/USDT",
+            exchange="binance",
+            price=50000.0,
+            volume=100.0,
+            time=time.time(),
+            bid=49999.0,
+            ask=50001.0,
+            last=50000.0
+        )
+        await tick_cache.update_ticker("binance", tick)
+        
+        # 3. Coordinate bot access
+        bot_id = "trading_bot_1"
+        if await bot_cache.block_exchange("binance", "BTC/USDT", bot_id):
+            try:
+                # 4. Create and execute order
+                order = Order(
+                    ex_order_id="ORD_001",
+                    symbol="BTC/USDT",
+                    side="buy",
+                    volume=0.1,
+                    price=50000.0,
+                    status="filled",
+                    order_type="market",
+                    exchange="binance",
+                    timestamp=time.time()
+                )
+                await orders_cache.save_order("binance", order)
+                
+                # 5. Record trade
+                trade = Trade(
+                    trade_id="TRD_001",
+                    symbol="BTC/USDT",
+                    side="buy",
+                    volume=0.1,
+                    price=50000.0,
+                    cost=5000.0,
+                    fee=5.0,
+                    time=time.time(),
+                    ex_id="binance",
+                    ex_order_id="ORD_001"
+                )
+                await trades_cache.push_trade("binance", trade)
+                
+                # 6. Update position
+                position = Position(
+                    symbol="BTC/USDT",
+                    cost=5000.0,
+                    volume=0.1,
+                    fee=5.0,
+                    price=50000.0,
+                    timestamp=time.time(),
+                    ex_id="binance"
+                )
+                await account_cache.upsert_positions(123, [position])
+                
+                print("Complete trading workflow executed successfully!")
+                
+            finally:
+                await bot_cache.unblock_exchange("binance", "BTC/USDT")
+    
+    finally:
+        # Close all caches
+        await symbol_cache.close()
+        await tick_cache.close()
+        await orders_cache.close()
+        await trades_cache.close()
+        await account_cache.close()
+        await bot_cache.close()
 
 Advanced Features
 -----------------

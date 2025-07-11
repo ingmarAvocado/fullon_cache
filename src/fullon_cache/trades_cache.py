@@ -17,31 +17,46 @@ logger = logging.getLogger(__name__)
 
 
 class TradesCache:
-    """Cache for trade queue management using Redis.
+    """Cache for trade queue management with fullon_orm.Trade model support.
     
     This cache provides trade queue management using Redis lists for queuing
-    and simple status tracking, matching the legacy implementation.
+    and status tracking with fullon_orm models for type safety.
     
     Features:
         - FIFO trade queues using Redis lists
         - Trade status timestamp tracking
-        - User trade queues
-        - Integration with fullon_orm Trade model
+        - User-specific trade queues
+        - Type-safe fullon_orm Trade model integration
+        - Both ORM-based and legacy methods supported
         
     Example:
+        from fullon_orm.models import Trade
+        from datetime import datetime, timezone
+        
         cache = TradesCache()
         
-        # Push trade to queue
-        result = await cache.push_trade_list("BTC/USDT", "binance", trade_data)
+        # Create trade with ORM model
+        trade = Trade(
+            trade_id=12345,
+            ex_trade_id="EX_TRD_001",
+            symbol="BTC/USDT",
+            side="buy",
+            volume=0.1,
+            price=50000.0,
+            cost=5000.0,
+            fee=5.0,
+            time=datetime.now(timezone.utc)
+        )
         
-        # Get all trades from queue (destructive read)
-        trades = await cache.get_trades_list("BTC/USDT", "binance")
+        # Push trade using ORM model
+        success = await cache.push_trade("binance", trade)
         
-        # Push user trade
-        await cache.push_my_trades_list("123", "binance", trade_data)
+        # Get all trades as ORM models (destructive read)
+        trades = await cache.get_trades("BTC/USDT", "binance")
         
-        # Pop user trade
-        trade = await cache.pop_my_trade("123", "binance")
+        # User trade operations
+        await cache.push_user_trade("user_123", "binance", trade)
+        user_trade = await cache.pop_user_trade("user_123", "binance")
     """
 
     def __init__(self):
@@ -478,4 +493,21 @@ class TradesCache:
             if "TimeoutError" not in str(e):
                 logger.error(f"Failed to pop user trade: {e}")
             return None
+
+    # Legacy compatibility methods
+    async def push_trade_list_legacy(self, symbol: str, exchange: str, trade: dict = {}) -> int:
+        """Legacy method for backward compatibility."""
+        return await self.push_trade_list(symbol, exchange, trade)
+
+    async def push_my_trades_list_legacy(self, uid: str, exchange: str, trade: dict = {}) -> int:
+        """Legacy method for backward compatibility."""
+        return await self.push_my_trades_list(uid, exchange, trade)
+
+    async def get_trades_list_legacy(self, symbol: str, exchange: str) -> list[dict[str, Any]]:
+        """Legacy method for backward compatibility."""
+        return await self.get_trades_list(symbol, exchange)
+
+    async def pop_my_trade_legacy(self, uid: str, exchange: str, timeout: int = 0) -> dict[str, Any] | None:
+        """Legacy method for backward compatibility."""
+        return await self.pop_my_trade(uid, exchange, timeout)
 

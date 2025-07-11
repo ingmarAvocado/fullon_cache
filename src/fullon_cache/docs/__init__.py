@@ -9,7 +9,7 @@ Example:
     print(api_reference.TICK_CACHE)
 """
 
-from . import api_reference, caching_guide, migration, performance, quickstart, testing_guide
+from . import api_reference, caching_guide, migration, performance, quickstart, testing_guide, model_usage
 
 __all__ = [
     'quickstart',
@@ -18,6 +18,7 @@ __all__ = [
     'testing_guide',
     'migration',
     'performance',
+    'model_usage',
     'get_all_docs',
 ]
 
@@ -40,4 +41,7 @@ def get_all_docs() -> dict:
         'Testing Guide': testing_guide.GUIDE,
         'Migration Guide': migration.GUIDE,
         'Performance Guide': performance.GUIDE,
+        'Model Usage Guide': model_usage.MODEL_USAGE_GUIDE,
+        'Type Safety Guide': model_usage.TYPE_SAFETY_GUIDE,
+        'Performance Optimization': model_usage.PERFORMANCE_GUIDE,
     }

@@ -17,23 +17,46 @@ logger = logging.getLogger(__name__)
 
 
 class SymbolCache:
-    """Cache for symbol information with auto-refresh.
+    """Cache for symbol metadata with fullon_orm.Symbol model support.
     
     This cache stores symbol metadata and automatically refreshes from the
-    database when a symbol is not found in cache. Returns fullon_orm Symbol
-    objects for seamless integration with the ORM layer.
+    database when symbols are not found. Provides both ORM-based methods
+    using fullon_orm.Symbol models and legacy compatibility methods.
     
     Example:
+        from fullon_orm.models import Symbol
+        
         cache = SymbolCache()
         
-        # Get symbols for an exchange
+        # Create symbol with ORM model
+        symbol = Symbol(
+            symbol="BTC/USDT",
+            base="BTC",
+            quote="USDT",
+            cat_ex_id=1,
+            decimals=8,
+            updateframe="1h",
+            backtest=30,
+            futures=False,
+            only_ticker=False
+        )
+        
+        # Add symbol using ORM model
+        success = await cache.add_symbol(symbol)
+        
+        # Get symbol using model as search criteria
+        search_symbol = Symbol(symbol="BTC/USDT", cat_ex_id=1)
+        retrieved = await cache.get_symbol_by_model(search_symbol)
+        
+        # Check if symbol exists
+        exists = await cache.symbol_exists(symbol)
+        
+        # Get symbols for same exchange
+        exchange_symbols = await cache.get_symbols_for_exchange(symbol)
+        
+        # Legacy methods still supported
         symbols = await cache.get_symbols("binance")
-        
-        # Get specific symbol
         btc_usdt = await cache.get_symbol("BTC/USDT", exchange_name="binance")
-        
-        # Delete symbol from cache
-        await cache.delete_symbol("BTC/USDT", exchange_name="binance")
     """
 
     def __init__(self):
@@ -434,3 +457,28 @@ class SymbolCache:
             # Fallback - in production this should be proper mapping
             exchange_name = "binance"
         return exchange_name
+
+    # Legacy compatibility methods
+    async def delete_symbol_legacy(self, symbol_name: str, exchange_name: str) -> bool:
+        """Legacy method for backward compatibility."""
+        try:
+            # Direct deletion from Redis using exchange_name
+            # Remove from symbols list
+            symbols_key = f'symbols_list:{exchange_name}'
+            if await self._cache.exists(symbols_key):
+                await self._cache.hdel(symbols_key, symbol_name)
+
+            # Also remove from tickers if it exists
+            tickers_key = f'tickers:{exchange_name}'
+            if await self._cache.exists(tickers_key):
+                await self._cache.hdel(tickers_key, symbol_name)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to delete symbol (legacy): {e}")
+            return False
+
+    async def delete_symbol_orm(self, symbol: Symbol) -> bool:
+        """Alternative ORM method name for compatibility."""
+        return await self.delete_symbol(symbol)

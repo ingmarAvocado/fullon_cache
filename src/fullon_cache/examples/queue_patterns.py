@@ -7,9 +7,11 @@ EXAMPLE = '''
 import asyncio
 import logging
 from datetime import datetime, timezone
+import time
 from typing import Dict, Any
 
 from fullon_cache import OrdersCache, TradesCache
+from fullon_orm.models import Order, Trade
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,18 +35,20 @@ async def order_queue_example():
             await orders_cache.push_open_order(oid, local_oid)
             logger.info(f"Pushed order {oid} -> {local_oid}")
         
-        # Save order data with expiration
+        # Save order data using fullon_orm.Order models
         for i, (oid, _) in enumerate(order_pairs):
-            order_data = {
-                "symbol": "BTC/USDT",
-                "side": "buy" if i % 2 == 0 else "sell",
-                "size": 0.1 * (i + 1),
-                "price": 50000 + (i * 100),
-                "status": "pending",
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-            await orders_cache.save_order_data("binance", oid, order_data)
-            logger.info(f"Saved data for order {oid}")
+            order = Order(
+                ex_order_id=oid,
+                symbol="BTC/USDT",
+                side="buy" if i % 2 == 0 else "sell",
+                volume=0.1 * (i + 1),
+                price=50000 + (i * 100),
+                status="pending",
+                exchange="binance",
+                timestamp=datetime.now(timezone.utc)
+            )
+            await orders_cache.save_order("binance", order)
+            logger.info(f"Saved order {oid} using ORM model")
         
         # Pop orders from queue (FIFO)
         logger.info("\\nPopping orders from queue:")

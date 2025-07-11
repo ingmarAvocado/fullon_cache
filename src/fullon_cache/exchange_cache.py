@@ -15,6 +15,9 @@ from fullon_orm.repositories import ExchangeRepository
 
 from .process_cache import ProcessCache
 
+# Legacy compatibility - alias for Exchange
+ExchangeAccount = Exchange
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +58,7 @@ class ExchangeCache(ProcessCache):
         self._key_prefix = "exchange"
         self._cache_ttl = 24 * 60 * 60  # 24 hours
 
-    async def get_exchange(self, ex_id: int) -> Exchange | None:
+    async def get_exchange(self, ex_id: int | None) -> Exchange | None:
         """Get exchange by ID from cache or database.
         
         Args:
@@ -64,6 +67,9 @@ class ExchangeCache(ProcessCache):
         Returns:
             Exchange object or None if not found
         """
+        if ex_id is None:
+            return None
+            
         redis_key = f"exchange:{ex_id}"
         
         try:
@@ -92,7 +98,7 @@ class ExchangeCache(ProcessCache):
             logger.error(f"Error getting exchange {ex_id}: {e}")
             return None
 
-    async def get_exchanges(self, user_id: int) -> list[Exchange]:
+    async def get_exchanges(self, user_id: int | None) -> list[Exchange]:
         """Get all exchanges for a user from cache or database.
         
         Args:
@@ -101,6 +107,8 @@ class ExchangeCache(ProcessCache):
         Returns:
             List of Exchange objects
         """
+        if user_id is None:
+            return []
         redis_key = f"user_exchanges:{user_id}"
         
         try:
@@ -296,7 +304,7 @@ class ExchangeCache(ProcessCache):
             
         return False
 
-    async def get_exchange_by_name(self, exchange_name: str) -> CatExchange | None:
+    async def get_exchange_by_name(self, exchange_name: str | None) -> CatExchange | None:
         """Get catalog exchange by name.
         
         Args:
@@ -305,6 +313,9 @@ class ExchangeCache(ProcessCache):
         Returns:
             CatExchange object or None if not found
         """
+        if exchange_name is None:
+            return None
+            
         cat_exchanges = await self.get_cat_exchanges(exchange_name=exchange_name, all=True)
         for cat_ex in cat_exchanges:
             if cat_ex.name == exchange_name:

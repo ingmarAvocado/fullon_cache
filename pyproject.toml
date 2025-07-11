@@ -7,7 +7,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<4.0"
 dependencies = [
     "fullon-orm @ git+ssh://git@github.com/ingmarAvocado/fullon_orm.git",
     "redis[hiredis] (>=6.2.0,<7.0.0)"
@@ -42,10 +42,10 @@ pytest-asyncio = "^1.0.0"
 pytest-xdist = "^3.7.0"
 pytest-cov = "^6.1.1"
 pytest-order = "^1.2.0"
-ruff = "^0.11.12"
+ruff = "^0.12.2"
 mypy = "^1.16.0"
 types-redis = "^4.6.0.20241004"
-psutil = "^6.1.1"
+psutil = "^7.0.0"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

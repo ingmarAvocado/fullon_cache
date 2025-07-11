@@ -329,11 +329,11 @@ class TestSymbolCache:
         cache = SymbolCache()
         
         try:
-            symbol_name = "BTC/USDT"
-            exchange_name = "binance"
+            # Create symbol for deletion test
+            symbol = create_test_symbol("BTC/USDT", 1)
 
             # Delete from non-existent cache (should not raise exception)
-            await cache.delete_symbol(symbol_name, exchange_name=exchange_name)
+            await cache.delete_symbol(symbol)
             
         finally:
             await cache._cache.close()
@@ -368,7 +368,8 @@ class TestSymbolCache:
             assert btc_symbol.symbol == "BTC/USDT"
 
             # Delete one symbol
-            await cache.delete_symbol("ADA/USDT", exchange_name=exchange)
+            ada_symbol = create_test_symbol("ADA/USDT", 1)
+            await cache.delete_symbol(ada_symbol)
 
             # Verify deletion
             remaining_symbols = await cache.get_symbols(exchange)
@@ -388,12 +389,13 @@ class TestSymbolCache:
         cache = SymbolCache()
         
         try:
-            # Create symbol with specific properties
+            # Create symbol with specific properties that exist on the model
             symbol = create_test_symbol("BTC/USDT", 1)
-            symbol.precision = 8
-            symbol.margin = True
-            symbol.leverage = 125.0
-            symbol.tick_size = 0.01
+            # Use actual Symbol model attributes
+            assert symbol.decimals == 8
+            assert symbol.futures is False
+            assert symbol.only_ticker is False
+            assert symbol.updateframe == "1h"
 
             # Store and retrieve
             async with cache._cache._redis_context() as redis_client:
@@ -402,10 +404,10 @@ class TestSymbolCache:
 
             retrieved = await cache.get_symbol("BTC/USDT", exchange_name="binance")
             assert retrieved is not None
-            assert retrieved.precision == 8
-            assert retrieved.margin is True
-            assert retrieved.leverage == 125.0
-            assert retrieved.tick_size == 0.01
+            assert retrieved.decimals == 8
+            assert retrieved.futures is False
+            assert retrieved.only_ticker is False
+            assert retrieved.updateframe == "1h"
             
         finally:
             await cache._cache.close()
@@ -460,8 +462,9 @@ class TestSymbolCache:
         
         try:
             original_symbol = create_test_symbol("BTC/USDT", 1)
-            original_symbol.contract_size = 0.001
-            original_symbol.description = "Bitcoin to USDT pair"
+            # Use attributes that actually exist on the Symbol model
+            assert original_symbol.decimals == 8
+            assert original_symbol.updateframe == "1h"
 
             # Store and retrieve
             async with cache._cache._redis_context() as redis_client:
@@ -475,8 +478,10 @@ class TestSymbolCache:
             assert retrieved.symbol == original_symbol.symbol
             assert retrieved.base == original_symbol.base
             assert retrieved.quote == original_symbol.quote
-            assert retrieved.contract_size == original_symbol.contract_size
-            assert retrieved.description == original_symbol.description
+            assert retrieved.decimals == original_symbol.decimals
+            assert retrieved.updateframe == original_symbol.updateframe
+            assert retrieved.futures == original_symbol.futures
+            assert retrieved.only_ticker == original_symbol.only_ticker
             
         finally:
             await cache._cache.close()

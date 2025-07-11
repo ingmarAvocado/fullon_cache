@@ -8,9 +8,11 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 import random
+import time
 from typing import Dict, Any
 
 from fullon_cache import TickCache, BaseCache
+from fullon_orm.models import Tick
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,16 +30,20 @@ async def ticker_publisher(cache: TickCache, exchange: str, symbols: list, durat
             base_price = 50000 if symbol == "BTC/USDT" else 3000
             price = base_price + random.uniform(-100, 100)
             
-            ticker_data = {
-                "bid": price - 0.5,
-                "ask": price + 0.5,
-                "last": price,
-                "volume": random.uniform(100, 1000),
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
+            # Create ticker using fullon_orm.Tick model
+            tick = Tick(
+                symbol=symbol,
+                exchange=exchange,
+                price=price,
+                volume=random.uniform(100, 1000),
+                time=time.time(),
+                bid=price - 0.5,
+                ask=price + 0.5,
+                last=price
+            )
             
             # Update ticker (this also publishes to subscribers)
-            await cache.update_ticker(symbol, exchange, ticker_data)
+            await cache.update_ticker(exchange, tick)
             
         await asyncio.sleep(1)  # Update every second
     
@@ -79,6 +85,11 @@ async def price_monitor(cache: TickCache, symbols: list, interval: int = 2):
                 print(f"{symbol}: ${price:,.2f}")
             else:
                 print(f"{symbol}: No price available")
+                
+            # Also demonstrate getting full ticker as ORM model
+            ticker = await cache.get_ticker(symbol, "binance")
+            if ticker:
+                print(f"  Full ticker: Bid=${ticker.bid:.2f}, Ask=${ticker.ask:.2f}, Volume={ticker.volume:.2f}")
                 
         await asyncio.sleep(interval)
 

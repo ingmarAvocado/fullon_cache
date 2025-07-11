@@ -186,11 +186,17 @@ class TestUvloopPerformance:
         assert 'uvloop_available' in info
         assert 'platform' in info
 
-        if info['uvloop_available']:
-            # If uvloop is available, it should be used
+        # In test environment, we force asyncio regardless of uvloop availability
+        # Check if we're in test mode by looking for the env var
+        import os
+        if os.getenv('FULLON_CACHE_EVENT_LOOP') == 'asyncio':
+            # Test environment - should use asyncio
+            assert info['active_policy'] == 'asyncio'
+        elif info['uvloop_available']:
+            # Production environment with uvloop available
             assert info['active_policy'] == 'uvloop'
         else:
-            # Otherwise, asyncio should be used
+            # Production environment without uvloop
             assert info['active_policy'] == 'asyncio'
 
     async def test_uvloop_detection(self):

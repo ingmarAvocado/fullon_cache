@@ -338,7 +338,7 @@ class TestSymbolCacheORM:
         mock_base_cache.hdel.return_value = 1
 
         # Test legacy method
-        await symbol_cache.delete_symbol("BTC/USDT", exchange_name="binance")
+        await symbol_cache.delete_symbol_legacy("BTC/USDT", "binance")
         
         # Verify legacy behavior still works
         assert mock_base_cache.hdel.call_count == 2

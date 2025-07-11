@@ -249,6 +249,9 @@ class TestBotCache:
 
     async def test_update_bot_success(self, bot_cache):
         """Test update_bot updates bot status."""
+        import uuid
+        bot_id = f"bot_1_{uuid.uuid4().hex[:8]}"
+        
         bot_data = {
             "feed_1": {
                 "status": "running",
@@ -261,36 +264,39 @@ class TestBotCache:
             }
         }
 
-        result = await bot_cache.update_bot("bot_1", bot_data)
+        result = await bot_cache.update_bot(bot_id, bot_data)
         assert result is True
 
         # Verify stored
         bots = await bot_cache.get_bots()
-        assert "bot_1" in bots
-        assert "feed_1" in bots["bot_1"]
-        assert "feed_2" in bots["bot_1"]
-        assert "timestamp" in bots["bot_1"]["feed_1"]
-        assert "timestamp" in bots["bot_1"]["feed_2"]
+        assert bot_id in bots
+        assert "feed_1" in bots[bot_id]
+        assert "feed_2" in bots[bot_id]
+        assert "timestamp" in bots[bot_id]["feed_1"]
+        assert "timestamp" in bots[bot_id]["feed_2"]
 
     async def test_update_bot_non_dict_values(self, bot_cache):
         """Test update_bot handles non-dict feed values."""
+        import uuid
+        bot_id = f"bot_1_{uuid.uuid4().hex[:8]}"
+        
         bot_data = {
             "feed_1": {"status": "running"},
             "feed_2": "invalid_value",  # Non-dict value
             "feed_3": 123  # Another non-dict
         }
 
-        result = await bot_cache.update_bot("bot_1", bot_data)
+        result = await bot_cache.update_bot(bot_id, bot_data)
         assert result is True
 
         # Verify stored
         bots = await bot_cache.get_bots()
-        assert "bot_1" in bots
+        assert bot_id in bots
         # Dict feed should have timestamp
-        assert "timestamp" in bots["bot_1"]["feed_1"]
+        assert "timestamp" in bots[bot_id]["feed_1"]
         # Non-dict feeds should not have timestamp
-        assert bots["bot_1"]["feed_2"] == "invalid_value"
-        assert bots["bot_1"]["feed_3"] == 123
+        assert bots[bot_id]["feed_2"] == "invalid_value"
+        assert bots[bot_id]["feed_3"] == 123
 
     async def test_update_bot_with_error(self, bot_cache):
         """Test update_bot handles errors gracefully."""

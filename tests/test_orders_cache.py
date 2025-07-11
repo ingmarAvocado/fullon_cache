@@ -13,22 +13,34 @@ class TestOrdersCacheLegacyMethods:
     @pytest.mark.asyncio
     async def test_push_open_order(self, orders_cache):
         """Test legacy push_open_order method."""
+        # Use unique IDs to avoid conflicts with parallel tests
+        import uuid
+        unique_id = str(uuid.uuid4())[:8]
+        local_oid = f"LOCAL456_{unique_id}"
+        order_id_expected = f"ORDER123_{unique_id}"
+        
         # Push order using legacy method
-        await orders_cache.push_open_order("ORDER123", "LOCAL456")
+        await orders_cache.push_open_order(order_id_expected, local_oid)
 
         # Pop using legacy method
-        order_id = await orders_cache.pop_open_order("LOCAL456")
-        assert order_id == "ORDER123"
+        order_id = await orders_cache.pop_open_order(local_oid)
+        assert order_id == order_id_expected
 
     @pytest.mark.asyncio
     async def test_pop_open_order_immediate_return(self, orders_cache):
         """Test pop_open_order returns immediately when data exists."""
+        # Use unique IDs to avoid conflicts
+        import uuid
+        unique_id = str(uuid.uuid4())[:8]
+        local_oid = f"LOCAL_FAST_{unique_id}"
+        order_id_expected = f"ORDER_FAST_{unique_id}"
+        
         # First push an order
-        await orders_cache.push_open_order("ORDER_FAST", "LOCAL_FAST")
+        await orders_cache.push_open_order(order_id_expected, local_oid)
         
         # Pop should return immediately
-        result = await orders_cache.pop_open_order("LOCAL_FAST")
-        assert result == "ORDER_FAST"
+        result = await orders_cache.pop_open_order(local_oid)
+        assert result == order_id_expected
 
     @pytest.mark.asyncio
     async def test_save_order_data(self, orders_cache):
