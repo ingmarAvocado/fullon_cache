@@ -1,6 +1,6 @@
 [project]
 name = "fullon-cache"
-version = "0.4.0"
+version = "0.4.1"
 description = "Cache module for Fullon trading system"
 authors = [
     {name = "Fullon Project"}
