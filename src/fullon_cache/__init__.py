@@ -159,6 +159,29 @@ __all__ = [
     "examples",
 ]
 
+# Configure logging for fullon_cache
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+from fullon_log import configure_logger
+
+# Load environment variables
+load_dotenv()
+
+# Configure default logging to /tmp/fullon_log/
+log_dir = os.getenv('FULLON_CACHE_LOG_DIR', '/tmp/fullon_log')
+Path(log_dir).mkdir(parents=True, exist_ok=True)
+
+# Configure component-specific logging
+configure_logger(
+    file_path=f"{log_dir}/fullon_cache.log",
+    rotation="10 MB",
+    retention="7 days",
+    console=True,
+    colors=True,
+    format="beautiful"
+)
+
 # Import all cache modules for easy access
 # Make docs and examples available
 from . import docs, examples

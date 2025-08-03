@@ -462,9 +462,25 @@ LOG_LEVEL=INFO                    # DEBUG, INFO, WARNING, ERROR, CRITICAL
 LOG_FORMAT=beautiful              # beautiful, minimal, development, detailed, trading, json
 LOG_CONSOLE=true                  # Enable console output
 LOG_COLORS=true                   # Enable colored output
-LOG_FILE_PATH=/var/log/fullon_cache.log  # Optional: log to file
-LOG_ROTATION=100 MB               # Optional: file rotation
-LOG_RETENTION=7 days              # Optional: retention period
+
+# Fullon Cache specific log directory
+FULLON_CACHE_LOG_DIR=/tmp/fullon_log  # Default: /tmp/fullon_log/
+                                      # Logs saved to: {LOG_DIR}/fullon_cache.log
+                                      # Automatic rotation: 10 MB
+                                      # Retention: 7 days
+```
+
+### Default Log File Location
+By default, fullon_cache logs are saved to:
+- **File**: `/tmp/fullon_log/fullon_cache.log`
+- **Rotation**: 10 MB per file
+- **Retention**: 7 days
+- **Console**: Also displays on console with beautiful formatting
+
+You can override the log directory:
+```bash
+# Custom log directory
+FULLON_CACHE_LOG_DIR=/var/log/fullon
 ```
 
 ### Structured Logging

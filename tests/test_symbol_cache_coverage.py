@@ -602,14 +602,16 @@ class TestSymbolCacheCoverage:
             await cache.close()
 
     @pytest.mark.asyncio
-    async def test_concurrent_symbol_operations(self, clean_redis):
+    async def test_concurrent_symbol_operations(self, clean_redis, worker_id):
         """Test concurrent symbol operations."""
         cache = SymbolCache()
         
         try:
-            # Create multiple symbols
+            # Create multiple symbols with worker-specific cat_ex_id for isolation
+            # Each worker gets a unique cat_ex_id to prevent Redis key collisions  
+            worker_cat_ex_id = hash(worker_id) % 1000000  # Generate unique cat_ex_id per worker
             symbols = [
-                create_test_symbol(f"CONC_{i}/USDT", 1)
+                create_test_symbol(f"CONC_{worker_id}_{i}/USDT", worker_cat_ex_id)
                 for i in range(10)
             ]
             
