@@ -5,15 +5,15 @@ refresh from the database when symbols are not found.
 """
 
 import json
-import logging
 
+from fullon_log import get_component_logger
 from fullon_orm import get_async_session
 from fullon_orm.models import Symbol
 from fullon_orm.repositories import ExchangeRepository, SymbolRepository
 
 from .base_cache import BaseCache
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.symbol")
 
 
 class SymbolCache:

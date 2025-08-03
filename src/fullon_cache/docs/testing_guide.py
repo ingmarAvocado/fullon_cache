@@ -364,8 +364,8 @@ Debugging Failed Tests
 
 2. **Add Logging**
    
-       import logging
-       logging.basicConfig(level=logging.DEBUG)
+       from fullon_log import get_component_logger
+       logger = get_component_logger("fullon.cache.tests", level="DEBUG")
 
 3. **Use pytest-asyncio markers**
    

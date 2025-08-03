@@ -665,10 +665,10 @@ async def proper_resource_management():
 Add comprehensive logging and monitoring:
 
 ```python
-import logging
 from datetime import datetime
+from fullon_log import get_component_logger
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.integration")
 
 async def monitored_trading_operation():
     """Add monitoring and logging to operations."""

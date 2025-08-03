@@ -5,7 +5,7 @@ for processing trading orders.
 """
 
 import json
-import logging
+from fullon_log import get_component_logger
 from datetime import UTC, datetime
 from typing import Any
 
@@ -13,7 +13,7 @@ from fullon_orm.models import Order
 
 from .base_cache import BaseCache
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.orders")
 
 
 class OrdersCache:

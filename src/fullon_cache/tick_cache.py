@@ -6,15 +6,15 @@ with real-time updates via Redis pub/sub.
 
 import asyncio
 import json
-import logging
 from typing import Any
 
+from fullon_log import get_component_logger
 from fullon_orm.models import Tick
 from fullon_orm.repositories import ExchangeRepository
 
 from .base_cache import BaseCache
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.tick")
 
 
 class TickCache:

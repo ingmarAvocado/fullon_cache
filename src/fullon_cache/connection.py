@@ -6,7 +6,7 @@ uvloop optimization for maximum performance.
 """
 
 import asyncio
-import logging
+from fullon_log import get_component_logger
 import os
 import weakref
 from typing import Any, Optional
@@ -22,7 +22,7 @@ from .exceptions import ConfigurationError, ConnectionError
 # Load environment variables
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.connection")
 
 
 class ConnectionPool:

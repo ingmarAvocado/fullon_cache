@@ -355,9 +355,9 @@ Error Handling
 All operations handle errors gracefully:
 
     from fullon_cache import TickCache, CacheError
-    import logging
+    from fullon_log import get_component_logger
     
-    logger = logging.getLogger(__name__)
+    logger = get_component_logger("fullon.cache.examples")
     tick_cache = TickCache()
     
     try:

@@ -5,7 +5,7 @@ including bots, crawlers, order processors, and other components.
 """
 
 import json
-import logging
+from fullon_log import get_component_logger
 from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any
@@ -13,7 +13,7 @@ from typing import Any
 from .base_cache import BaseCache
 from .exceptions import CacheError
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.process")
 
 
 class ProcessType(str, Enum):

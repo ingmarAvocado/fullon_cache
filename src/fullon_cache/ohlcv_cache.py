@@ -5,11 +5,12 @@ for trading symbols and timeframes.
 """
 
 import json
-import logging
+
+from fullon_log import get_component_logger
 
 from .base_cache import BaseCache
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.ohlcv")
 
 
 class OHLCVCache:

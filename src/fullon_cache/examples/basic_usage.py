@@ -6,7 +6,6 @@ storing, retrieving, and managing cached data.
 
 EXAMPLE = '''
 import asyncio
-import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -14,9 +13,9 @@ from fullon_cache import (
     TickCache, OrdersCache, AccountCache, TradesCache,
     ExchangeCache, SymbolCache
 )
+from fullon_log import get_component_logger
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.examples.basic")
 
 
 async def ticker_operations():

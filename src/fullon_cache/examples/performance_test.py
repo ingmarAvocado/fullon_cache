@@ -4,7 +4,7 @@ This example measures the performance of various cache operations.
 """
 
 import asyncio
-import logging
+from fullon_log import get_component_logger
 import time
 from statistics import mean, stdev
 
@@ -15,8 +15,7 @@ from fullon_cache.orders_cache import OrdersCache
 from fullon_cache.symbol_cache import SymbolCache
 from fullon_cache.tick_cache import TickCache
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.examples.performance")
 
 
 async def benchmark_operation(name: str, operation, iterations: int = 1000):

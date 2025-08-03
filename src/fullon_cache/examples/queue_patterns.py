@@ -5,7 +5,7 @@ This module demonstrates order and trade queue management patterns.
 
 EXAMPLE = '''
 import asyncio
-import logging
+from fullon_log import get_component_logger
 from datetime import datetime, timezone
 import time
 from typing import Dict, Any
@@ -14,7 +14,7 @@ from fullon_cache import OrdersCache, TradesCache
 from fullon_orm.models import Order, Trade
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.examples.queue")
 
 
 async def order_queue_example():

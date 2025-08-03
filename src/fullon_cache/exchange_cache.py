@@ -6,7 +6,7 @@ models for type safety and consistency.
 """
 
 import json
-import logging
+from fullon_log import get_component_logger
 from typing import Any
 
 from fullon_orm import get_async_session
@@ -18,7 +18,7 @@ from .process_cache import ProcessCache
 # Legacy compatibility - alias for Exchange
 ExchangeAccount = Exchange
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.exchange")
 
 
 class ExchangeCache(ProcessCache):

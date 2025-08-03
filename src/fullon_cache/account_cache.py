@@ -1,15 +1,15 @@
 """Simplified account and position cache matching legacy interface."""
 
 import json
-import logging
 from datetime import UTC, datetime
 
+from fullon_log import get_component_logger
 from fullon_orm.models import Position
 
 from .base_cache import BaseCache
 from .exceptions import CacheError, ConnectionError
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.account")
 
 
 class AccountCache:

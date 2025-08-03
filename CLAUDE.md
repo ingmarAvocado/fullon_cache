@@ -25,6 +25,7 @@ The fullon_cache system provides a modern, production-ready cache implementation
    - Coverage integrated into CI/CD pipeline
    - No code merged without proper test coverage
 8. All timestamp fields are proper Python datetime objects with timezone-aware UTC timestamps as default.
+9. **Uses fullon_log for consistent logging** across all fullon components.
 
 ## Architecture Overview
 
@@ -414,6 +415,68 @@ poetry run pytest --cov=fullon_cache --cov-fail-under=100 && poetry run ruff che
    - `from fullon_cache.examples import basic_usage` provides runnable examples
    - Every public method has docstring with examples
    - An LLM can understand and use the library without any external docs
+
+## Logging with Fullon Log
+
+This project uses fullon-log for consistent, beautiful logging across all fullon components.
+
+### Installation
+fullon-log is already included as a dependency in pyproject.toml:
+```toml
+dependencies = [
+    "fullon-log @ git+ssh://git@github.com/ingmarAvocado/fullon_log.git"
+]
+```
+
+### Basic Usage
+All cache modules use component-specific loggers:
+```python
+from fullon_log import get_component_logger
+
+class TickCache:
+    def __init__(self):
+        self.logger = get_component_logger("fullon.cache.tick")
+    
+    def update_ticker(self, exchange: str, symbol: str):
+        self.logger.info("Ticker updated", exchange=exchange, symbol=symbol)
+```
+
+### Component Logger Names
+- `fullon.cache.base` - BaseCache operations
+- `fullon.cache.process` - Process monitoring
+- `fullon.cache.exchange` - Exchange data caching
+- `fullon.cache.tick` - Ticker data operations
+- `fullon.cache.orders` - Order management
+- `fullon.cache.account` - Account data
+- `fullon.cache.bot` - Bot coordination
+- `fullon.cache.trades` - Trade data
+- `fullon.cache.ohlcv` - OHLCV data
+- `fullon.cache.connection` - Redis connections
+- `fullon.cache.examples.*` - Example code loggers
+
+### Environment Configuration
+Configure logging via .env variables:
+```bash
+# .env file
+LOG_LEVEL=INFO                    # DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_FORMAT=beautiful              # beautiful, minimal, development, detailed, trading, json
+LOG_CONSOLE=true                  # Enable console output
+LOG_COLORS=true                   # Enable colored output
+LOG_FILE_PATH=/var/log/fullon_cache.log  # Optional: log to file
+LOG_ROTATION=100 MB               # Optional: file rotation
+LOG_RETENTION=7 days              # Optional: retention period
+```
+
+### Structured Logging
+Use structured logging with key-value pairs:
+```python
+logger.info("Cache operation completed", 
+           operation="set_ticker", 
+           exchange="binance", 
+           symbol="BTC/USDT",
+           latency_ms=1.2,
+           cache_hit=True)
+```
 
 ## Configuration
 

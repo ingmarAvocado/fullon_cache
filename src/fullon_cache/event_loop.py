@@ -6,13 +6,13 @@ on unsupported platforms.
 """
 
 import asyncio
-import logging
+from fullon_log import get_component_logger
 import os
 import sys
 from enum import Enum
 from typing import Any
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.event_loop")
 
 
 class EventLoopPolicy(Enum):

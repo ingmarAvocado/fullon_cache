@@ -5,7 +5,7 @@ connection management, key operations, and common utilities.
 """
 
 import json
-import logging
+from fullon_log import get_component_logger
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -22,7 +22,7 @@ from .exceptions import (
     SerializationError,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.base")
 
 
 class BaseCache:

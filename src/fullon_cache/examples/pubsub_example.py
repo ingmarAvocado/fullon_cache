@@ -5,7 +5,7 @@ This module demonstrates real-time ticker updates using Redis pub/sub.
 
 EXAMPLE = '''
 import asyncio
-import logging
+from fullon_log import get_component_logger
 from datetime import datetime, timezone
 import random
 import time
@@ -15,7 +15,7 @@ from fullon_cache import TickCache, BaseCache
 from fullon_orm.models import Tick
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.examples.pubsub")
 
 
 async def ticker_publisher(cache: TickCache, exchange: str, symbols: list, duration: int = 10):

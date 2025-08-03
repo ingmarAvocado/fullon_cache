@@ -5,7 +5,7 @@ with real Redis instances and proper isolation for parallel execution.
 """
 
 import asyncio
-import logging
+from fullon_log import get_component_logger
 import os
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, Mock, patch
@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv('.env.test', override=True)
 
 # Setup logger
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.tests")
 
 # Import cache modules (will be available after implementation)
 from fullon_cache import (

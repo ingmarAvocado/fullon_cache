@@ -6,14 +6,13 @@ conflicts when trading the same symbols on exchanges.
 
 EXAMPLE = '''
 import asyncio
-import logging
 from datetime import datetime, timezone
 from typing import List, Dict
 
 from fullon_cache import BotCache
+from fullon_log import get_component_logger
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_component_logger("fullon.cache.examples.bot_coordination")
 
 
 async def simulate_bot(bot_id: str, exchange: str, symbols: List[str], cache: BotCache):
