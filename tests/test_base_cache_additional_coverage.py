@@ -14,9 +14,9 @@ class TestBaseCacheAdditionalCoverage:
     """Additional coverage tests for BaseCache."""
 
     @pytest.mark.asyncio
-    async def test_scard_method(self):
+    async def test_scard_method(self, base_cache):
         """Test scard (set cardinality)."""
-        cache = BaseCache()
+        cache = base_cache
 
         # Add members to set
         async with cache._redis_context() as r:
@@ -27,9 +27,9 @@ class TestBaseCacheAdditionalCoverage:
         assert count == 3
 
     @pytest.mark.asyncio
-    async def test_scard_with_error(self):
+    async def test_scard_with_error(self, base_cache):
         """Test scard with Redis error."""
-        cache = BaseCache()
+        cache = base_cache
 
         with patch('redis.asyncio.Redis.scard', side_effect=RedisError("Scard failed")):
             with pytest.raises(CacheError) as exc_info:
@@ -37,9 +37,9 @@ class TestBaseCacheAdditionalCoverage:
             assert "Failed to get set cardinality" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_scan_iter_method(self, worker_id):
+    async def test_scan_iter_method(self, base_cache, worker_id):
         """Test scan_iter method."""
-        cache = BaseCache()
+        cache = base_cache
 
         # Use worker-specific keys with timestamp to avoid collisions
         import time
@@ -93,9 +93,9 @@ class TestBaseCacheAdditionalCoverage:
                 pass
 
     @pytest.mark.asyncio
-    async def test_subscribe_error_handling(self):
+    async def test_subscribe_error_handling(self, base_cache):
         """Test subscribe with connection errors."""
-        cache = BaseCache()
+        cache = base_cache
 
         # Mock get_redis to raise error immediately
         with patch('fullon_cache.base_cache.get_redis', side_effect=RedisError("Connection failed")):
@@ -105,9 +105,9 @@ class TestBaseCacheAdditionalCoverage:
             assert "Subscription failed" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_ping_with_redis_error(self):
+    async def test_ping_with_redis_error(self, base_cache):
         """Test ping with Redis error."""
-        cache = BaseCache()
+        cache = base_cache
 
         # Mock ping to raise RedisError
         with patch('redis.asyncio.Redis.ping', side_effect=RedisError("Connection lost")):
@@ -117,9 +117,9 @@ class TestBaseCacheAdditionalCoverage:
             assert "Unexpected error connecting to Redis" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_hset_with_mapping(self):
+    async def test_hset_with_mapping(self, base_cache):
         """Test hset with mapping parameter."""
-        cache = BaseCache()
+        cache = base_cache
 
         # Delete the hash first to ensure clean state
         await cache.delete("hash")
@@ -134,9 +134,9 @@ class TestBaseCacheAdditionalCoverage:
         assert value1 == "value1"
 
     @pytest.mark.asyncio
-    async def test_subscribe_with_no_channels(self):
+    async def test_subscribe_with_no_channels(self, base_cache):
         """Test subscribe with empty channel list."""
-        cache = BaseCache()
+        cache = base_cache
 
         # Subscribe with no channels should immediately return
         count = 0
@@ -148,9 +148,9 @@ class TestBaseCacheAdditionalCoverage:
         assert count == 0
 
     @pytest.mark.asyncio
-    async def test_publish_coverage(self):
+    async def test_publish_coverage(self, base_cache):
         """Test publish method error path."""
-        cache = BaseCache()
+        cache = base_cache
 
         # Normal publish should work
         result = await cache.publish("test_channel", "test message")

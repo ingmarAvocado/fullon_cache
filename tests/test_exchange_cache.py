@@ -310,3 +310,246 @@ class TestExchangeCacheWebSocketErrors:
         await cache.push_ws_error("Test error", "test_ex")
         error = await cache.pop_ws_error("test_ex", timeout=1)
         assert error == "Test error"
+
+    @pytest.mark.asyncio
+    async def test_get_exchange_database_fallback(self, clean_redis):
+        """Test getting exchange from database when not in cache."""
+        cache = ExchangeCache()
+        
+        try:
+            # Test database fallback - will return None since no real DB data
+            exchange = await cache.get_exchange(999)
+            assert exchange is None
+            
+        finally:
+            await cache._cache.close()
+
+    @pytest.mark.asyncio
+    async def test_get_exchange_error_handling(self, clean_redis):
+        """Test error handling in get_exchange method."""
+        cache = ExchangeCache()
+        
+        try:
+            # Mock an error in the cache.get method
+            with pytest.MonkeyPatch().context() as m:
+                async def mock_get(*args, **kwargs):
+                    raise Exception("Redis error")
+                m.setattr(cache._cache, 'get', mock_get)
+                
+                # Should handle error and return None
+                exchange = await cache.get_exchange(123)
+                assert exchange is None
+                
+        finally:
+            await cache._cache.close()
+
+    @pytest.mark.asyncio
+    async def test_get_exchanges_method(self, clean_redis):
+        """Test get_exchanges method."""
+        cache = ExchangeCache()
+        
+        try:
+            # Test get_exchanges - will return empty list since no real DB data
+            exchanges = await cache.get_exchanges(user_id=123)
+            assert isinstance(exchanges, list)
+            assert len(exchanges) == 0
+            
+        finally:
+            await cache._cache.close()
+
+    @pytest.mark.asyncio
+    async def test_get_exchanges_error_handling(self, clean_redis):
+        """Test error handling in get_exchanges method."""
+        cache = ExchangeCache()
+        
+        try:
+            # Mock an error by patching the repository method
+            with pytest.MonkeyPatch().context() as m:
+                def mock_get_async_session():
+                    raise Exception("Database connection error")
+                    
+                m.setattr('fullon_cache.exchange_cache.get_async_session', mock_get_async_session)
+                
+                # Should handle error and return empty list
+                exchanges = await cache.get_exchanges(user_id=123)
+                assert isinstance(exchanges, list)
+                assert len(exchanges) == 0
+                
+        finally:
+            await cache._cache.close()
+
+    @pytest.mark.asyncio
+    async def test_get_exchange_by_name_method(self, clean_redis):
+        """Test get_exchange_by_name method."""
+        cache = ExchangeCache()
+        
+        try:
+            # Test get_exchange_by_name - will return None since no real DB data
+            exchange = await cache.get_exchange_by_name("binance")
+            assert exchange is None
+            
+        finally:
+            await cache._cache.close()
+
+    @pytest.mark.asyncio
+    async def test_get_exchange_by_name_error_handling(self, clean_redis):
+        """Test error handling in get_exchange_by_name method."""
+        cache = ExchangeCache()
+        
+        try:
+            # Mock an error in the database session
+            with pytest.MonkeyPatch().context() as m:
+                def mock_get_async_session():
+                    raise Exception("Database connection error")
+                    
+                m.setattr('fullon_cache.exchange_cache.get_async_session', mock_get_async_session)
+                
+                # Should handle error and return None
+                exchange = await cache.get_exchange_by_name("binance")
+                assert exchange is None
+                
+        finally:
+            await cache._cache.close()
+
+    @pytest.mark.asyncio
+    async def test_get_cat_exchanges_method(self, clean_redis):
+        """Test get_cat_exchanges method."""
+        cache = ExchangeCache()
+        
+        try:
+            # Test get_cat_exchanges - may return data from test DB
+            cat_exchanges = await cache.get_cat_exchanges()
+            assert isinstance(cat_exchanges, list)
+            # Don't assert length since test DB might have data
+            
+        finally:
+            await cache._cache.close()
+
+    @pytest.mark.asyncio
+    async def test_get_cat_exchanges_error_handling(self, clean_redis):
+        """Test error handling in get_cat_exchanges method."""
+        cache = ExchangeCache()
+        
+        try:
+            # Mock an error in the database session
+            with pytest.MonkeyPatch().context() as m:
+                def mock_get_async_session():
+                    raise Exception("Database connection error")
+                    
+                m.setattr('fullon_cache.exchange_cache.get_async_session', mock_get_async_session)
+                
+                # Should handle error and return empty list
+                cat_exchanges = await cache.get_cat_exchanges()
+                assert isinstance(cat_exchanges, list)
+                assert len(cat_exchanges) == 0
+                
+        finally:
+            await cache._cache.close()
+
+    @pytest.mark.asyncio
+    async def test_get_cat_exchanges_with_name_filter(self, clean_redis):
+        """Test get_cat_exchanges with exchange name filter."""
+        cache = ExchangeCache()
+        
+        try:
+            # Test get_cat_exchanges with name filter - will return empty list since no real DB data
+            cat_exchanges = await cache.get_cat_exchanges(exchange_name="binance")
+            assert isinstance(cat_exchanges, list)
+            assert len(cat_exchanges) == 0
+            
+        finally:
+            await cache._cache.close()
+
+    @pytest.mark.asyncio
+    async def test_get_cat_exchanges_with_all_flag(self, clean_redis):
+        """Test get_cat_exchanges with all=True flag."""
+        cache = ExchangeCache()
+        
+        try:
+            # Test get_cat_exchanges with all=True - will return empty list since no real DB data
+            cat_exchanges = await cache.get_cat_exchanges(all=True)
+            assert isinstance(cat_exchanges, list)
+            assert len(cat_exchanges) == 0
+            
+        finally:
+            await cache._cache.close()
+
+    @pytest.mark.asyncio
+    async def test_get_exchange_cache_set_on_database_hit(self, clean_redis):
+        """Test that exchange is cached when found in database."""
+        cache = ExchangeCache()
+        
+        try:
+            # Mock successful database retrieval
+            with pytest.MonkeyPatch().context() as m:
+                # Mock cache.get to return None (cache miss)
+                async def mock_cache_get(*args, **kwargs):
+                    return None
+                m.setattr(cache._cache, 'get', mock_cache_get)
+                
+                # Mock database session to return exchange data
+                from fullon_orm.models import Exchange
+                mock_exchange = Exchange(
+                    ex_id=123,
+                    uid=456,
+                    cat_ex_id=1,
+                    name="Test Exchange",
+                    test=False,
+                    active=True
+                )
+                
+                # Mock the repository method
+                class MockRepo:
+                    async def get_by_id(self, ex_id):
+                        if ex_id == 123:
+                            return mock_exchange
+                        return None
+                
+                def mock_get_async_session():
+                    # Create a mock async iterator that avoids RuntimeWarnings
+                    class MockAsyncSessionGenerator:
+                        def __init__(self):
+                            self.session_mock = type('MockSession', (), {})()
+                            self._exhausted = False
+                            
+                        def __aiter__(self):
+                            return self
+                            
+                        async def __anext__(self):
+                            if self._exhausted:
+                                raise StopAsyncIteration
+                            self._exhausted = True
+                            return self.session_mock
+                            
+                        async def aclose(self):
+                            # Proper cleanup method - no warnings
+                            pass
+                    
+                    return MockAsyncSessionGenerator()
+                    
+                def mock_exchange_repo(session):
+                    return MockRepo()
+                
+                m.setattr('fullon_cache.exchange_cache.get_async_session', mock_get_async_session)
+                m.setattr('fullon_cache.exchange_cache.ExchangeRepository', mock_exchange_repo)
+                
+                # Mock cache.set to verify it gets called
+                cache_set_called = False
+                original_set = cache._cache.set
+                
+                async def mock_cache_set(*args, **kwargs):
+                    nonlocal cache_set_called
+                    cache_set_called = True
+                    return await original_set(*args, **kwargs)
+                
+                m.setattr(cache._cache, 'set', mock_cache_set)
+                
+                # Get exchange - should fetch from DB and cache it
+                exchange = await cache.get_exchange(123)
+                assert exchange is not None
+                assert exchange.ex_id == 123
+                assert exchange.name == "Test Exchange"
+                assert cache_set_called  # Verify cache was updated
+                
+        finally:
+            await cache._cache.close()

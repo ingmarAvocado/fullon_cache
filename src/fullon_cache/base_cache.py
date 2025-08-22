@@ -558,17 +558,28 @@ class BaseCache:
         deleted = 0
         keys_to_delete = []
 
-        async for key in self.scan_keys(pattern):
-            keys_to_delete.append(key)
+        # Use scan_iter instead of scan_keys to get full Redis key names
+        async for full_key in self.scan_iter(pattern):
+            keys_to_delete.append(full_key)
 
             # Delete in batches of 1000
             if len(keys_to_delete) >= 1000:
-                deleted += await self.delete(*keys_to_delete)
-                keys_to_delete = []
+                try:
+                    async with self._redis_context() as r:
+                        deleted += await r.delete(*keys_to_delete)
+                    keys_to_delete = []
+                except RedisError as e:
+                    logger.error(f"Failed to delete batch of keys: {e}")
+                    raise CacheError(f"Failed to delete keys: {str(e)}")
 
         # Delete remaining keys
         if keys_to_delete:
-            deleted += await self.delete(*keys_to_delete)
+            try:
+                async with self._redis_context() as r:
+                    deleted += await r.delete(*keys_to_delete)
+            except RedisError as e:
+                logger.error(f"Failed to delete remaining keys: {e}")
+                raise CacheError(f"Failed to delete keys: {str(e)}")
 
         return deleted
 

@@ -159,10 +159,14 @@ class TickCache:
         """
         try:
             channel = f'next_ticker:{exchange}:{symbol}'
-
-            async for message in self._cache.subscribe(channel):
+            
+            # Use async context manager to ensure proper cleanup
+            subscription = self._cache.subscribe(channel)
+            async for message in subscription:
                 if message and message.get('type') == 'message':
                     ticker = json.loads(message['data'])
+                    # Properly close the async iterator before returning
+                    await subscription.aclose()
                     return (float(ticker['price']), ticker['time'])
 
             return (0, None)

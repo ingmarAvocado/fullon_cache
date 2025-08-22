@@ -64,8 +64,13 @@ class TestSymbolCache:
         """Test _get_exchange_name_from_cat_ex_id method."""
         cache = SymbolCache()
         try:
+            # Test known mapping
+            result = cache._get_exchange_name_from_cat_ex_id("1")
+            assert result == "binance"
+            
+            # Test unknown ID gets test pattern
             result = cache._get_exchange_name_from_cat_ex_id("some_id")
-            assert result is None
+            assert result == "test_exchange_some_id"
         finally:
             await cache._cache.close()
 

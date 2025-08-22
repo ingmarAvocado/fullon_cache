@@ -170,58 +170,70 @@ class TestOHLCVCache:
             retrieved = await ohlcv_cache.get_latest_ohlcv_bars("BTCUSD", "1h", 10)
             assert retrieved == []
 
-    async def test_different_timeframes(self, ohlcv_cache):
+    async def test_different_timeframes(self, ohlcv_cache, worker_id):
         """Test storing bars for different timeframes."""
         bars_1m = [[1234567890, 50000, 50100, 49900, 50050, 100]]
         bars_5m = [[1234567890, 50000, 50200, 49800, 50150, 500]]
         bars_1h = [[1234567890, 50000, 50500, 49500, 50400, 6000]]
         bars_1d = [[1234567890, 50000, 51000, 49000, 50800, 144000]]
 
-        await ohlcv_cache.update_ohlcv_bars("BTCUSD", "1m", bars_1m)
-        await ohlcv_cache.update_ohlcv_bars("BTCUSD", "5m", bars_5m)
-        await ohlcv_cache.update_ohlcv_bars("BTCUSD", "1h", bars_1h)
-        await ohlcv_cache.update_ohlcv_bars("BTCUSD", "1d", bars_1d)
+        # Use worker-specific symbol to avoid parallel test conflicts
+        symbol = f"BTC_{worker_id}_USD_TF"
+
+        await ohlcv_cache.update_ohlcv_bars(symbol, "1m", bars_1m)
+        await ohlcv_cache.update_ohlcv_bars(symbol, "5m", bars_5m)
+        await ohlcv_cache.update_ohlcv_bars(symbol, "1h", bars_1h)
+        await ohlcv_cache.update_ohlcv_bars(symbol, "1d", bars_1d)
 
         # Each timeframe should have its own data
-        retrieved_1m = await ohlcv_cache.get_latest_ohlcv_bars("BTCUSD", "1m", 1)
-        retrieved_5m = await ohlcv_cache.get_latest_ohlcv_bars("BTCUSD", "5m", 1)
-        retrieved_1h = await ohlcv_cache.get_latest_ohlcv_bars("BTCUSD", "1h", 1)
-        retrieved_1d = await ohlcv_cache.get_latest_ohlcv_bars("BTCUSD", "1d", 1)
+        retrieved_1m = await ohlcv_cache.get_latest_ohlcv_bars(symbol, "1m", 1)
+        retrieved_5m = await ohlcv_cache.get_latest_ohlcv_bars(symbol, "5m", 1)
+        retrieved_1h = await ohlcv_cache.get_latest_ohlcv_bars(symbol, "1h", 1)
+        retrieved_1d = await ohlcv_cache.get_latest_ohlcv_bars(symbol, "1d", 1)
 
         assert retrieved_1m[0] == bars_1m[0]
         assert retrieved_5m[0] == bars_5m[0]
         assert retrieved_1h[0] == bars_1h[0]
         assert retrieved_1d[0] == bars_1d[0]
 
-    async def test_different_symbols(self, ohlcv_cache):
+    async def test_different_symbols(self, ohlcv_cache, worker_id):
         """Test storing bars for different symbols."""
         bars_btc = [[1234567890, 50000, 50100, 49900, 50050, 1234.56]]
         bars_eth = [[1234567890, 3000, 3010, 2990, 3005, 234.56]]
         bars_bnb = [[1234567890, 400, 401, 399, 400.5, 34.56]]
 
-        await ohlcv_cache.update_ohlcv_bars("BTCUSD", "1h", bars_btc)
-        await ohlcv_cache.update_ohlcv_bars("ETHUSD", "1h", bars_eth)
-        await ohlcv_cache.update_ohlcv_bars("BNBUSD", "1h", bars_bnb)
+        # Use worker-specific symbols to avoid parallel test conflicts
+        btc_symbol = f"BTC_{worker_id}_USD_DIFF"
+        eth_symbol = f"ETH_{worker_id}_USD_DIFF"
+        bnb_symbol = f"BNB_{worker_id}_USD_DIFF"
+
+        await ohlcv_cache.update_ohlcv_bars(btc_symbol, "1h", bars_btc)
+        await ohlcv_cache.update_ohlcv_bars(eth_symbol, "1h", bars_eth)
+        await ohlcv_cache.update_ohlcv_bars(bnb_symbol, "1h", bars_bnb)
 
         # Each symbol should have its own data
-        retrieved_btc = await ohlcv_cache.get_latest_ohlcv_bars("BTCUSD", "1h", 1)
-        retrieved_eth = await ohlcv_cache.get_latest_ohlcv_bars("ETHUSD", "1h", 1)
-        retrieved_bnb = await ohlcv_cache.get_latest_ohlcv_bars("BNBUSD", "1h", 1)
+        retrieved_btc = await ohlcv_cache.get_latest_ohlcv_bars(btc_symbol, "1h", 1)
+        retrieved_eth = await ohlcv_cache.get_latest_ohlcv_bars(eth_symbol, "1h", 1)
+        retrieved_bnb = await ohlcv_cache.get_latest_ohlcv_bars(bnb_symbol, "1h", 1)
 
         assert retrieved_btc[0] == bars_btc[0]
         assert retrieved_eth[0] == bars_eth[0]
         assert retrieved_bnb[0] == bars_bnb[0]
 
-    async def test_symbol_without_slash(self, ohlcv_cache):
+    async def test_symbol_without_slash(self, ohlcv_cache, worker_id):
         """Test handling symbols without slashes."""
         bars = [[1234567890, 50000, 50100, 49900, 50050, 1234.56]]
 
-        # These symbols don't have slashes
-        await ohlcv_cache.update_ohlcv_bars("BTCUSD", "1h", bars)
-        await ohlcv_cache.update_ohlcv_bars("ETHUSD", "1h", bars)
+        # Use worker-specific symbols to avoid parallel test conflicts
+        btc_symbol = f"BTC_{worker_id}_USD"
+        eth_symbol = f"ETH_{worker_id}_USD"
 
-        retrieved_btc = await ohlcv_cache.get_latest_ohlcv_bars("BTCUSD", "1h", 1)
-        retrieved_eth = await ohlcv_cache.get_latest_ohlcv_bars("ETHUSD", "1h", 1)
+        # These symbols don't have slashes
+        await ohlcv_cache.update_ohlcv_bars(btc_symbol, "1h", bars)
+        await ohlcv_cache.update_ohlcv_bars(eth_symbol, "1h", bars)
+
+        retrieved_btc = await ohlcv_cache.get_latest_ohlcv_bars(btc_symbol, "1h", 1)
+        retrieved_eth = await ohlcv_cache.get_latest_ohlcv_bars(eth_symbol, "1h", 1)
 
         assert len(retrieved_btc) == 1
         assert len(retrieved_eth) == 1
@@ -265,25 +277,28 @@ class TestOHLCVCache:
         retrieved = await ohlcv_cache.get_latest_ohlcv_bars("BTCUSD", "1m", 3)
         assert len(retrieved) == 3
 
-    async def test_integration_scenario(self, ohlcv_cache):
+    async def test_integration_scenario(self, ohlcv_cache, worker_id):
         """Test a complete usage scenario."""
+        # Use worker-specific symbol to avoid parallel test conflicts
+        symbol = f"BTC_{worker_id}_USD_INTEG"
+        
         # 1. Initial bars
         initial_bars = [
             [1234567890, 50000, 50100, 49900, 50050, 1234.56],
             [1234567950, 50050, 50150, 50000, 50100, 2345.67],
             [1234568010, 50100, 50200, 50050, 50150, 3456.78],
         ]
-        await ohlcv_cache.update_ohlcv_bars("BTCUSD", "1m", initial_bars)
+        await ohlcv_cache.update_ohlcv_bars(symbol, "1m", initial_bars)
 
         # 2. Add more bars
         new_bars = [
             [1234568070, 50150, 50250, 50100, 50200, 4567.89],
             [1234568130, 50200, 50300, 50150, 50250, 5678.90],
         ]
-        await ohlcv_cache.update_ohlcv_bars("BTCUSD", "1m", new_bars)
+        await ohlcv_cache.update_ohlcv_bars(symbol, "1m", new_bars)
 
         # 3. Get recent bars
-        recent = await ohlcv_cache.get_latest_ohlcv_bars("BTCUSD", "1m", 3)
+        recent = await ohlcv_cache.get_latest_ohlcv_bars(symbol, "1m", 3)
         assert len(recent) == 3
         assert recent[0] == initial_bars[2]  # Third initial bar
         assert recent[1] == new_bars[0]      # First new bar
@@ -291,12 +306,12 @@ class TestOHLCVCache:
 
         # 4. Different timeframe for same symbol
         hourly_bar = [[1234567890, 50000, 50300, 49900, 50250, 15000]]
-        await ohlcv_cache.update_ohlcv_bars("BTCUSD", "1h", hourly_bar)
+        await ohlcv_cache.update_ohlcv_bars(symbol, "1h", hourly_bar)
 
-        hourly = await ohlcv_cache.get_latest_ohlcv_bars("BTCUSD", "1h", 1)
+        hourly = await ohlcv_cache.get_latest_ohlcv_bars(symbol, "1h", 1)
         assert len(hourly) == 1
         assert hourly[0] == hourly_bar[0]
 
         # 5. Verify 1m data still intact
-        minute_bars = await ohlcv_cache.get_latest_ohlcv_bars("BTCUSD", "1m", 5)
+        minute_bars = await ohlcv_cache.get_latest_ohlcv_bars(symbol, "1m", 5)
         assert len(minute_bars) == 5

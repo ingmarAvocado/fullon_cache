@@ -436,10 +436,14 @@ class TestSymbolCacheORM:
     @pytest.mark.asyncio
     async def test_exchange_name_mapping(self, symbol_cache, sample_symbol):
         """Test exchange name mapping from cat_ex_id."""
-        # This would test the _get_exchange_name_from_cat_ex_id method
-        # For now it returns None, but in production it should map cat_ex_id to exchange name
+        # Test the _get_exchange_name_from_cat_ex_id method
+        # It should map cat_ex_id to exchange name for known exchanges
         exchange_name = symbol_cache._get_exchange_name_from_cat_ex_id("1")
-        assert exchange_name is None  # Current implementation
+        assert exchange_name == "binance"  # Known mapping
+        
+        # Test unknown ID gets test pattern
+        exchange_name = symbol_cache._get_exchange_name_from_cat_ex_id("unknown")
+        assert exchange_name == "test_exchange_unknown"
 
     @pytest.mark.asyncio
     async def test_cache_key_generation(self, symbol_cache, sample_symbol):
