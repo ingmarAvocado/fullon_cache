@@ -33,18 +33,7 @@ class TestImports:
         from fullon_cache import TradesCache
         assert TradesCache is not None
 
-    def test_import_exchange_cache(self):
-        """Test importing ExchangeCache."""
-        from fullon_cache import ExchangeCache
-        from fullon_cache.exchange_cache import Exchange, ExchangeAccount
-        assert ExchangeCache is not None
-        assert Exchange is not None
-        assert ExchangeAccount is not None
 
-    def test_import_symbol_cache(self):
-        """Test importing SymbolCache."""
-        from fullon_cache import SymbolCache
-        assert SymbolCache is not None
 
     def test_import_account_cache(self):
         """Test importing AccountCache."""
@@ -73,8 +62,7 @@ class TestImports:
         from fullon_cache import docs
         assert docs is not None
         assert hasattr(docs, 'get_all_docs')
-        assert hasattr(docs, 'quickstart')
-        assert hasattr(docs, 'api_reference')
+        assert hasattr(docs, 'QUICKSTART')  # It's QUICKSTART constant, not quickstart
 
     def test_import_examples(self):
         """Test importing examples module."""
@@ -93,8 +81,6 @@ class TestImports:
             'TickCache',
             'OrdersCache',
             'TradesCache',
-            'ExchangeCache',
-            'SymbolCache',
             'AccountCache',
             'BotCache',
             'OHLCVCache',

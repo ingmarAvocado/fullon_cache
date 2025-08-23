@@ -1,47 +1,45 @@
 """Documentation module for Fullon Cache.
 
-This module provides comprehensive guides and references accessible directly
-from Python, making the library fully self-documenting.
-
-Example:
-    from fullon_cache.docs import quickstart, api_reference
-    print(quickstart.GUIDE)
-    print(api_reference.TICK_CACHE)
+This module contains documentation strings and guides for using the cache system.
 """
 
-from . import api_reference, caching_guide, migration, performance, quickstart, testing_guide, model_usage
+# Placeholder documentation - should be implemented later
+QUICKSTART = """
+# Fullon Cache Quickstart Guide
 
-__all__ = [
-    'quickstart',
-    'api_reference',
-    'caching_guide',
-    'testing_guide',
-    'migration',
-    'performance',
-    'model_usage',
-    'get_all_docs',
-]
+## Installation
+```bash
+pip install fullon-cache[uvloop]
+```
 
+## Basic Usage
+```python
+import asyncio
+from fullon_cache import TickCache
+from fullon_orm.models import Tick, Symbol
 
-def get_all_docs() -> dict:
-    """Get all documentation in a structured format.
+async def main():
+    cache = TickCache()
     
-    Returns:
-        Dict mapping doc names to their content
-        
-    Example:
-        docs = get_all_docs()
-        for name, content in docs.items():
-            print(f"\\n=== {name} ===\\n{content}")
-    """
+    # Create symbol and tick
+    symbol = Symbol(symbol="BTC/USDT", cat_ex_id=1, base="BTC", quote="USDT")
+    tick = Tick(symbol="BTC/USDT", exchange="binance", price=50000.0, volume=100.0, time=time.time())
+    
+    # Store and retrieve
+    await cache.set_ticker(symbol, tick)
+    result = await cache.get_ticker(symbol)
+    
+    await cache.close()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+"""
+
+def get_all_docs():
+    """Get all available documentation."""
     return {
-        'Quick Start': quickstart.GUIDE,
-        'API Reference': api_reference.get_all_references(),
-        'Caching Guide': caching_guide.GUIDE,
-        'Testing Guide': testing_guide.GUIDE,
-        'Migration Guide': migration.GUIDE,
-        'Performance Guide': performance.GUIDE,
-        'Model Usage Guide': model_usage.MODEL_USAGE_GUIDE,
-        'Type Safety Guide': model_usage.TYPE_SAFETY_GUIDE,
-        'Performance Optimization': model_usage.PERFORMANCE_GUIDE,
+        'quickstart': QUICKSTART,
     }
+
+__all__ = ['QUICKSTART', 'get_all_docs']

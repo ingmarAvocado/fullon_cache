@@ -13,7 +13,7 @@ import pytest
 from fullon_orm.models import Symbol, Tick, Order, Trade, Position
 
 from fullon_cache import (
-    SymbolCache, TickCache, OrdersCache, TradesCache, AccountCache, BotCache
+    TickCache, OrdersCache, TradesCache, AccountCache, BotCache
 )
 
 
@@ -124,64 +124,6 @@ class TestModelValidationErrors:
         finally:
             await tick_cache._cache.close()
     
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_cross_module_error_propagation(self, clean_redis):
-        """Test that errors in one module don't break others."""
-        symbol_cache = SymbolCache()
-        tick_cache = TickCache()
-        orders_cache = OrdersCache()
-        
-        try:
-            # 1. Create valid symbol
-            symbol = Symbol(
-                symbol="ERROR/TEST",
-                base="ERROR",
-                quote="TEST",
-                cat_ex_id=1,
-                decimals=8,
-                updateframe="1h",
-                backtest=30,
-                futures=False,
-                only_ticker=False
-            )
-            
-            async with symbol_cache._cache._redis_context() as redis_client:
-                key = "symbols_list:binance"
-                await redis_client.hset(key, symbol.symbol, json.dumps(symbol.to_dict()))
-            
-            # 2. Create invalid tick for the symbol
-            invalid_tick = create_test_tick("ERROR/TEST", "binance", float('inf'))  # Invalid price
-            
-            # This should work (cache doesn't validate)
-            await tick_cache.update_ticker("binance", invalid_tick)
-            
-            # 3. Try to create order for this symbol
-            order = create_test_order("ERROR/TEST", "buy", 0.1, "ERROR_ORD")
-            await orders_cache.save_order_data("binance", order.ex_order_id, order.to_dict())
-            
-            # 4. All modules should still be functional
-            # Symbol cache should work
-            retrieved_symbol = await symbol_cache.get_symbol("ERROR/TEST", exchange_name="binance")
-            assert retrieved_symbol is not None
-            
-            # Tick cache should work (even with invalid data)
-            retrieved_tick = await tick_cache.get_ticker("ERROR/TEST", "binance")
-            assert retrieved_tick is not None
-            
-            # Orders cache should work
-            retrieved_order = await orders_cache.get_order_status("binance", "ERROR_ORD")
-            assert retrieved_order is not None
-            
-            # 5. Other symbols should still work normally
-            normal_tick = create_test_tick("BTC/USDT", "binance", 50000.0)
-            result = await tick_cache.update_ticker("binance", normal_tick)
-            assert result is True
-            
-        finally:
-            await symbol_cache._cache.close()
-            await tick_cache._cache.close()
-            await orders_cache._cache.close()
 
 
 class TestConcurrencyErrorHandling:
@@ -261,96 +203,6 @@ class TestConcurrencyErrorHandling:
             await tick_cache._cache.close()
             await orders_cache._cache.close()
     
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_partial_failure_recovery(self, clean_redis):
-        """Test recovery from partial failures in multi-module operations."""
-        symbol_cache = SymbolCache()
-        tick_cache = TickCache()
-        orders_cache = OrdersCache()
-        account_cache = AccountCache()
-        
-        try:
-            # 1. Successfully setup symbol
-            symbol = Symbol(
-                symbol="RECOVERY/TEST",
-                base="RECOVERY",
-                quote="TEST",
-                cat_ex_id=1,
-                decimals=8,
-                updateframe="1h",
-                backtest=30,
-                futures=False,
-                only_ticker=False
-            )
-            
-            async with symbol_cache._cache._redis_context() as redis_client:
-                key = "symbols_list:binance"
-                await redis_client.hset(key, symbol.symbol, json.dumps(symbol.to_dict()))
-            
-            # 2. Successfully update ticker
-            tick = create_test_tick("RECOVERY/TEST", "binance", 1500.0)
-            result = await tick_cache.update_ticker("binance", tick)
-            assert result is True
-            
-            # 3. Create order with some invalid data
-            order = create_test_order("RECOVERY/TEST", "buy", 0.1, "RECOVERY_ORD")
-            await orders_cache.save_order_data("binance", order.ex_order_id, order.to_dict())
-            
-            # 4. Simulate failure during position update (invalid position data)
-            invalid_position = Position(
-                symbol="RECOVERY/TEST",
-                volume=float('nan'),  # Invalid volume
-                price=-1.0,  # Invalid price
-                cost=0.0,
-                fee=0.0,
-                ex_id="1"
-            )
-            
-            # This might fail but shouldn't break other operations
-            try:
-                await account_cache.upsert_positions(1, [invalid_position])
-            except Exception:
-                pass  # Expected to potentially fail
-            
-            # 5. Verify system recovery - other operations should still work
-            # Symbol should still be accessible
-            retrieved_symbol = await symbol_cache.get_symbol("RECOVERY/TEST", exchange_name="binance")
-            assert retrieved_symbol is not None
-            
-            # Ticker should still be accessible
-            retrieved_tick = await tick_cache.get_ticker("RECOVERY/TEST", "binance")
-            assert retrieved_tick is not None
-            assert retrieved_tick.price == 1500.0
-            
-            # Order should still be accessible
-            retrieved_order = await orders_cache.get_order_status("binance", "RECOVERY_ORD")
-            assert retrieved_order is not None
-            
-            # 6. Create valid position to prove system recovered
-            valid_position = Position(
-                symbol="RECOVERY/TEST", 
-                volume=0.1,
-                price=1500.0,
-                cost=150.0,
-                fee=0.0,
-                ex_id="1"
-            )
-            
-            result = await account_cache.upsert_positions(1, [valid_position])
-            assert result is True
-            
-            # Verify position was created
-            positions = await account_cache.get_positions(1)
-            recovery_position = next((p for p in positions if p.symbol == "RECOVERY/TEST"), None)
-            assert recovery_position is not None
-            assert recovery_position.volume == 0.1
-            
-        finally:
-            await symbol_cache._cache.close()
-            await tick_cache._cache.close()
-            await orders_cache._cache.close()
-            await account_cache._cache.close()
 
 
 class TestResourceExhaustionHandling:

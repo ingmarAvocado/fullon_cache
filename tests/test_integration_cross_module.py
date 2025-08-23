@@ -11,7 +11,7 @@ import pytest
 from fullon_orm.models import Symbol, Tick, Order, Trade, Position
 
 from fullon_cache import (
-    SymbolCache, TickCache, OrdersCache, TradesCache, AccountCache, BotCache
+    TickCache, OrdersCache, TradesCache, AccountCache, BotCache
 )
 
 
@@ -43,83 +43,6 @@ def create_test_tick(symbol="BTC/USDT", exchange="binance", price=50000.0):
         last=price
     )
 
-
-class TestSymbolTickIntegration:
-    """Test integration between SymbolCache and TickCache."""
-    
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_symbol_with_ticker_data(self, clean_redis):
-        """Test symbol metadata with ticker data integration."""
-        symbol_cache = SymbolCache()
-        tick_cache = TickCache()
-        
-        try:
-            # 1. Add symbol metadata
-            symbol = create_test_symbol("BTC/USDT", 1)
-            symbol.tick_size = 0.01
-            symbol.precision = 8
-            
-            async with symbol_cache._cache._redis_context() as redis_client:
-                key = "symbols_list:binance"
-                await redis_client.hset(key, symbol.symbol, json.dumps(symbol.to_dict()))
-            
-            # 2. Add ticker data for the same symbol
-            tick = create_test_tick("BTC/USDT", "binance", 50000.0)
-            await tick_cache.update_ticker("binance", tick)
-            
-            # 3. Verify both are accessible
-            cached_symbol = await symbol_cache.get_symbol("BTC/USDT", exchange_name="binance")
-            cached_tick = await tick_cache.get_ticker("BTC/USDT", "binance")
-            
-            assert cached_symbol is not None
-            assert cached_tick is not None
-            
-            # 4. Verify data consistency
-            assert cached_symbol.symbol == cached_tick.symbol
-            # Note: Symbol doesn't have exchange attribute, only cat_ex_id
-            
-            # 5. Test price precision against symbol metadata
-            price = cached_tick.price
-            # Symbol has decimals attribute for precision
-            assert cached_symbol.decimals == 8  # BTC typically has 8 decimals
-            
-        finally:
-            await symbol_cache._cache.close()
-            await tick_cache._cache.close()
-    
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_symbol_deletion_affects_tickers(self, clean_redis):
-        """Test that deleting a symbol also removes associated ticker data."""
-        symbol_cache = SymbolCache()
-        tick_cache = TickCache()
-        
-        try:
-            # 1. Add symbol and ticker
-            symbol = create_test_symbol("ETH/USDT", "kraken")
-            tick = create_test_tick("ETH/USDT", "kraken", 3000.0)
-            
-            async with symbol_cache._cache._redis_context() as redis_client:
-                key = "symbols_list:kraken"
-                await redis_client.hset(key, symbol.symbol, json.dumps(symbol.to_dict()))
-            
-            await tick_cache.update_ticker("kraken", tick)
-            
-            # 2. Verify both exist
-            assert await symbol_cache.get_symbol("ETH/USDT", exchange_name="kraken") is not None
-            assert await tick_cache.get_ticker("ETH/USDT", "kraken") is not None
-            
-            # 3. Delete symbol (which should also delete ticker)
-            await symbol_cache.delete_symbol_legacy("ETH/USDT", "kraken")
-            
-            # 4. Verify both are gone
-            assert await symbol_cache.get_symbol("ETH/USDT", exchange_name="kraken") is None
-            assert await tick_cache.get_ticker("ETH/USDT", "kraken") is None
-            
-        finally:
-            await symbol_cache._cache.close()
-            await tick_cache._cache.close()
 
 
 class TestTickOrderIntegration:

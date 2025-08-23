@@ -22,17 +22,30 @@ async def ticker_publisher(cache: TickCache, exchange: str, symbols: list, durat
     """Simulate ticker updates being published."""
     logger.info(f"Starting ticker publisher for {exchange}")
     
+    from fullon_orm.models import Symbol
+    
+    # Create Symbol objects for clean interface
+    symbol_objects = {}
+    for sym in symbols:
+        base, quote = sym.split('/')
+        symbol_objects[sym] = Symbol(
+            symbol=sym,
+            cat_ex_id=1,
+            base=base,
+            quote=quote
+        )
+    
     end_time = asyncio.get_event_loop().time() + duration
     
     while asyncio.get_event_loop().time() < end_time:
-        for symbol in symbols:
+        for symbol_str in symbols:
             # Generate random price data
-            base_price = 50000 if symbol == "BTC/USDT" else 3000
+            base_price = 50000 if symbol_str == "BTC/USDT" else 3000
             price = base_price + random.uniform(-100, 100)
             
             # Create ticker using fullon_orm.Tick model
             tick = Tick(
-                symbol=symbol,
+                symbol=symbol_str,
                 exchange=exchange,
                 price=price,
                 volume=random.uniform(100, 1000),
@@ -42,8 +55,9 @@ async def ticker_publisher(cache: TickCache, exchange: str, symbols: list, durat
                 last=price
             )
             
-            # Update ticker (this also publishes to subscribers)
-            await cache.update_ticker(exchange, tick)
+            # Use new clean interface for publishing
+            symbol_obj = symbol_objects[symbol_str]
+            await cache.set_ticker(symbol_obj, tick)
             
         await asyncio.sleep(1)  # Update every second
     

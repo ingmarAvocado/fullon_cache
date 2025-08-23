@@ -54,8 +54,6 @@ Cache Modules:
 -------------
 - BaseCache: Core Redis operations and connection management
 - ProcessCache: System process monitoring and tracking
-- ExchangeCache: Exchange metadata and configuration
-- SymbolCache: Trading symbol information
 - TickCache: Real-time ticker data with pub/sub
 - AccountCache: User accounts and positions
 - OrdersCache: Order queue management with streams
@@ -135,8 +133,6 @@ __all__ = [
     "BaseCache",
     # Cache modules
     "ProcessCache",
-    "ExchangeCache",
-    "SymbolCache",
     "TickCache",
     "AccountCache",
     "OrdersCache",
@@ -197,10 +193,8 @@ from .event_loop import EventLoopPolicy, configure_event_loop, get_policy_info, 
 
 # Exceptions
 from .exceptions import CacheError, ConnectionError, SerializationError, StreamError
-from .exchange_cache import ExchangeCache
 from .ohlcv_cache import OHLCVCache
 from .orders_cache import OrdersCache
 from .process_cache import ProcessCache
-from .symbol_cache import SymbolCache
 from .tick_cache import TickCache
 from .trades_cache import TradesCache

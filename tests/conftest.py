@@ -26,11 +26,9 @@ from fullon_cache import (
     BaseCache,
     BotCache,
     ConnectionPool,
-    ExchangeCache,
     OHLCVCache,
     OrdersCache,
     ProcessCache,
-    SymbolCache,
     TickCache,
     TradesCache,
 )
@@ -359,8 +357,6 @@ def redis_db_per_file(request):
     test_file_db_map = {
         "test_base_cache.py": 0,
         "test_process_cache.py": 1,
-        "test_exchange_cache.py": 2,
-        "test_symbol_cache.py": 3,
         "test_tick_cache.py": 4,
         "test_account_cache.py": 0,  # Reuse within worker range is OK
         "test_orders_cache.py": 1,
@@ -711,16 +707,8 @@ trades_cache = create_isolated_cache_fixture(TradesCache)
 ohlcv_cache = create_isolated_cache_fixture(OHLCVCache)
 
 
-# Keep the exchange cache and symbol cache simple since they're working
-@pytest_asyncio.fixture
-async def exchange_cache(clean_redis) -> ExchangeCache:
-    """Provide a clean ExchangeCache instance."""
-    return ExchangeCache()
+# Keep the symbol cache simple since it's working
 
-@pytest_asyncio.fixture
-async def symbol_cache(clean_redis) -> SymbolCache:
-    """Provide a clean SymbolCache instance."""
-    return SymbolCache()
 
 
 # Import factories from the factories folder
@@ -822,12 +810,10 @@ def mock_database_connection_only():
         patch('fullon_orm.get_async_session'),
         patch('fullon_orm.database.get_async_session', create=True),
         # Also patch the specific cache modules that import it at module level
-        patch('fullon_cache.exchange_cache.get_async_session'),
-        patch('fullon_cache.symbol_cache.get_async_session'),
     ]
     
     # Apply all patches
-    with patches[0] as mock_session1, patches[1] as mock_session2, patches[2] as mock_session3, patches[3] as mock_session4:
+    with patches[0] as mock_session1, patches[1] as mock_session2:
         # Create a simple mock that avoids async generator issues entirely
         class MockAsyncSessionGenerator:
             def __init__(self):
@@ -852,7 +838,7 @@ def mock_database_connection_only():
             return MockAsyncSessionGenerator()
         
         # Assign the function to all patches
-        for mock_session in [mock_session1, mock_session2, mock_session3, mock_session4]:
+        for mock_session in [mock_session1, mock_session2]:
             mock_session.side_effect = mock_get_async_session
         
         # Mock repositories to return real exchange data
@@ -1029,10 +1015,3 @@ async def full_isolation(clean_redis):
 
 
 # Additional cache fixtures
-
-@pytest.fixture
-async def exchange_cache(setup_test_env):
-    """Create an exchange cache instance for testing."""
-    from fullon_cache import ExchangeCache
-    cache = ExchangeCache()
-    yield cache
