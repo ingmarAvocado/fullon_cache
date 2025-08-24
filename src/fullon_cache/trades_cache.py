@@ -16,7 +16,7 @@ from .base_cache import BaseCache
 logger = get_component_logger("fullon.cache.trades")
 
 
-class TradesCache:
+class TradesCache(BaseCache):
     """Cache for trade queue management with fullon_orm.Trade model support.
     
     This cache provides trade queue management using Redis lists for queuing
@@ -61,20 +61,7 @@ class TradesCache:
 
     def __init__(self):
         """Initialize the trades cache."""
-        self._cache = BaseCache()
-
-    async def __aenter__(self):
-        """Enter async context manager."""
-        await self._cache.__aenter__()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit async context manager with cleanup."""
-        return await self._cache.__aexit__(exc_type, exc_val, exc_tb)
-
-    async def close(self):
-        """Close the cache and cleanup resources."""
-        await self._cache.close()
+        super().__init__()
 
     async def push_trade_list(
         self,
@@ -104,7 +91,7 @@ class TradesCache:
                 trade_data = trade
 
             # Push to list
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 result = await redis_client.rpush(redis_key, json.dumps(trade_data))
 
             # Update trade status
@@ -126,9 +113,9 @@ class TradesCache:
         """
         try:
             status_key = f"TRADE:STATUS:{key}"
-            timestamp = self._cache._to_redis_timestamp(datetime.now(UTC))
+            timestamp = self._to_redis_timestamp(datetime.now(UTC))
 
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 await redis_client.set(status_key, timestamp)
             return True
         except Exception as e:
@@ -146,9 +133,9 @@ class TradesCache:
         """
         try:
             status_key = f"TRADE:STATUS:{key}"
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 value = await redis_client.get(status_key)
-            return self._cache._from_redis_timestamp(value) if value else None
+            return self._from_redis_timestamp(value) if value else None
         except Exception as e:
             logger.error(f"get_trade_status error: {e}")
             return None
@@ -169,14 +156,14 @@ class TradesCache:
             statuses = {}
 
             # Use raw Redis scan since these are raw keys
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 cursor = 0
                 while True:
                     cursor, keys = await redis_client.scan(cursor, match=f"{prefix}*", count=100)
                     for key in keys:
                         value = await redis_client.get(key)
                         if value:
-                            dt = self._cache._from_redis_timestamp(value)
+                            dt = self._from_redis_timestamp(value)
                             if dt:
                                 statuses[key] = dt
                     if cursor == 0:
@@ -202,7 +189,7 @@ class TradesCache:
         try:
             keys = []
 
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 cursor = 0
                 while True:
                     cursor, found_keys = await redis_client.scan(cursor, match=f"{prefix}*", count=100)
@@ -234,9 +221,9 @@ class TradesCache:
             if timestamp is None:
                 timestamp = datetime.now(UTC)
 
-            timestamp_str = self._cache._to_redis_timestamp(timestamp)
+            timestamp_str = self._to_redis_timestamp(timestamp)
 
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 await redis_client.set(status_key, timestamp_str)
             return True
         except Exception as e:
@@ -253,7 +240,7 @@ class TradesCache:
             deleted_count = 0
             pattern = "USER_TRADE:STATUS*"
 
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 cursor = 0
                 while True:
                     cursor, keys = await redis_client.scan(cursor, match=pattern, count=100)
@@ -292,7 +279,7 @@ class TradesCache:
                 trade_data = trade
 
             redis_key = f"user_trades:{uid}:{exchange}"
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 return await redis_client.rpush(redis_key, json.dumps(trade_data))
         except Exception as e:
             logger.error(f"Failed to push user trade: {e}")
@@ -317,7 +304,7 @@ class TradesCache:
         try:
             redis_key = f"user_trades:{uid}:{exchange}"
 
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 if timeout and timeout > 0:
                     # Blocking pop
                     result = await redis_client.blpop(redis_key, timeout=timeout)
@@ -359,7 +346,7 @@ class TradesCache:
             normalized_symbol = symbol.replace("/", "")
             redis_key = f"trades:{exchange}:{normalized_symbol}"
 
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 # Get all trades
                 trades_json = await redis_client.lrange(redis_key, 0, -1)
 
@@ -401,7 +388,7 @@ class TradesCache:
             trade_dict = trade.to_dict()
             
             # Push to list
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 await redis_client.rpush(redis_key, json.dumps(trade_dict))
             
             # Update trade status
@@ -427,7 +414,7 @@ class TradesCache:
             normalized_symbol = symbol.replace("/", "")
             redis_key = f"trades:{exchange}:{normalized_symbol}"
 
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 # Get all trades
                 trades_json = await redis_client.lrange(redis_key, 0, -1)
                 # Delete the list
@@ -464,7 +451,7 @@ class TradesCache:
             trade_dict = trade.to_dict()
             
             redis_key = f"user_trades:{uid}:{exchange}"
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 await redis_client.rpush(redis_key, json.dumps(trade_dict))
             return True
             
@@ -486,7 +473,7 @@ class TradesCache:
         try:
             redis_key = f"user_trades:{uid}:{exchange}"
 
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 if timeout and timeout > 0:
                     # Blocking pop
                     result = await redis_client.blpop(redis_key, timeout=timeout)

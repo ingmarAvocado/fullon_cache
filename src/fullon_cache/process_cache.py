@@ -38,7 +38,7 @@ class ProcessStatus(str, Enum):
     STOPPED = "stopped"
 
 
-class ProcessCache:
+class ProcessCache(BaseCache):
     """Cache for process monitoring and tracking.
     
     This cache tracks various system processes, their status, and health.
@@ -79,20 +79,7 @@ class ProcessCache:
 
     def __init__(self):
         """Initialize the process cache."""
-        self._cache = BaseCache(key_prefix="process")
-
-    async def __aenter__(self):
-        """Enter async context manager."""
-        await self._cache.__aenter__()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit async context manager with cleanup."""
-        return await self._cache.__aexit__(exc_type, exc_val, exc_tb)
-
-    async def close(self):
-        """Close the cache and cleanup resources."""
-        await self._cache.close()
+        super().__init__(key_prefix="process")
 
     async def register_process(
         self,
@@ -144,21 +131,21 @@ class ProcessCache:
 
         try:
             # Store process data
-            await self._cache.set_json(
+            await self.set_json(
                 f"data:{process_id}",
                 process_data,
                 ttl=86400  # 24 hour TTL
             )
 
             # Add to active set
-            await self._cache.hset(
+            await self.hset(
                 f"active:{process_type.value}",
                 process_id,
                 timestamp.isoformat()
             )
 
             # Add to component index
-            await self._cache.hset(
+            await self.hset(
                 "components",
                 component,
                 process_id
@@ -199,7 +186,7 @@ class ProcessCache:
             )
         """
         # Get current process data
-        process_data = await self._cache.get_json(f"data:{process_id}")
+        process_data = await self.get_json(f"data:{process_id}")
         if not process_data:
             logger.warning(f"Process not found: {process_id}")
             return False
@@ -222,14 +209,14 @@ class ProcessCache:
 
         try:
             # Save updated data
-            await self._cache.set_json(
+            await self.set_json(
                 f"data:{process_id}",
                 process_data,
                 ttl=86400  # Reset TTL
             )
 
             # Update active timestamp
-            await self._cache.hset(
+            await self.hset(
                 f"active:{process_data['process_type']}",
                 process_id,
                 timestamp.isoformat()
@@ -250,7 +237,7 @@ class ProcessCache:
         Returns:
             Process data dictionary or None if not found
         """
-        return await self._cache.get_json(f"data:{process_id}")
+        return await self.get_json(f"data:{process_id}")
 
     async def get_active_processes(
         self,
@@ -294,7 +281,7 @@ class ProcessCache:
         # Check each process type
         for ptype in types_to_check:
             # Get all processes of this type
-            processes = await self._cache.hgetall(f"active:{ptype.value}")
+            processes = await self.hgetall(f"active:{ptype.value}")
 
             for process_id, timestamp_str in processes.items():
                 # Check if process is recent enough
@@ -359,13 +346,13 @@ class ProcessCache:
         )
 
         # Remove from active set
-        await self._cache.hdel(
+        await self.hdel(
             f"active:{process_data['process_type']}",
             process_id
         )
 
         # Remove from component index
-        await self._cache.hdel("components", process_data["component"])
+        await self.hdel("components", process_data["component"])
 
         logger.debug(f"Stopped process: {process_id}")
         return True
@@ -404,7 +391,7 @@ class ProcessCache:
                                 cleaned += 1
                 except (ValueError, TypeError):
                     # Invalid timestamp, remove
-                    await self._cache.hdel(f"active:{process_type.value}", process_id)
+                    await self.hdel(f"active:{process_type.value}", process_id)
                     cleaned += 1
 
         if cleaned > 0:
@@ -440,7 +427,7 @@ class ProcessCache:
             Current process data for component or None
         """
         # Get process ID from component index
-        process_id = await self._cache.hget("components", component)
+        process_id = await self.hget("components", component)
         if not process_id:
             return None
 
@@ -518,7 +505,7 @@ class ProcessCache:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return await self._cache.publish(channel, json.dumps(payload))
+        return await self.publish(channel, json.dumps(payload))
 
     async def get_metrics(self) -> dict[str, Any]:
         """Get process cache metrics.
@@ -534,16 +521,16 @@ class ProcessCache:
 
         # Count processes by type
         for process_type in ProcessType:
-            count = len(await self._cache.hgetall(f"active:{process_type.value}"))
+            count = len(await self.hgetall(f"active:{process_type.value}"))
             metrics[f"active_{process_type.value}"] = count
             metrics["active_processes"] += count
 
         # Count total components
-        metrics["components"] = len(await self._cache.hgetall("components"))
+        metrics["components"] = len(await self.hgetall("components"))
 
         # Count total process data entries
         process_count = 0
-        async for _ in self._cache.scan_keys("data:*"):
+        async for _ in self.scan_keys("data:*"):
             process_count += 1
         metrics["total_processes"] = process_count
 

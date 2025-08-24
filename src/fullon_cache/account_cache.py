@@ -12,7 +12,7 @@ from .exceptions import CacheError, ConnectionError
 logger = get_component_logger("fullon.cache.account")
 
 
-class AccountCache:
+class AccountCache(BaseCache):
     """Cache for user accounts and positions with fullon_orm.Position support.
     
     Provides storage and retrieval of account balances and positions using
@@ -51,21 +51,8 @@ class AccountCache:
     """
 
     def __init__(self):
-        """Initialize account cache with BaseCache composition."""
-        self._cache = BaseCache()
-
-    async def __aenter__(self):
-        """Enter async context manager."""
-        await self._cache.__aenter__()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit async context manager with cleanup."""
-        return await self._cache.__aexit__(exc_type, exc_val, exc_tb)
-
-    async def close(self):
-        """Close the cache and cleanup resources."""
-        await self._cache.close()
+        """Initialize account cache inheriting from BaseCache."""
+        super().__init__()
 
     async def upsert_positions(
         self,
@@ -88,13 +75,13 @@ class AccountCache:
             str_ex_id = str(ex_id)
             key = "account_positions"
 
-            async with self._cache._redis_context() as redis:
+            async with self._redis_context() as redis:
                 if update_date:
                     # Only update timestamp if positions exist
                     existing = await redis.hget(key, str_ex_id)
                     if existing:
                         existing_positions = json.loads(existing)
-                        existing_positions['timestamp'] = self._cache._to_redis_timestamp(datetime.now(UTC))
+                        existing_positions['timestamp'] = self._to_redis_timestamp(datetime.now(UTC))
                         await redis.hset(key, str_ex_id, json.dumps(existing_positions))
                         return True
                     return False
@@ -117,7 +104,7 @@ class AccountCache:
                     }
 
                 # Add root timestamp
-                positions_dict['timestamp'] = self._cache._to_redis_timestamp(datetime.now(UTC))
+                positions_dict['timestamp'] = self._to_redis_timestamp(datetime.now(UTC))
 
                 await redis.hset(key, str_ex_id, json.dumps(positions_dict))
                 return True
@@ -139,7 +126,7 @@ class AccountCache:
             str_ex_id = str(position.ex_id)
             key = "account_positions"
 
-            async with self._cache._redis_context() as redis:
+            async with self._redis_context() as redis:
                 # Get existing positions
                 existing_data = await redis.hget(key, str_ex_id)
 
@@ -159,7 +146,7 @@ class AccountCache:
                 }
 
                 # Update root timestamp
-                positions_dict['timestamp'] = self._cache._to_redis_timestamp(datetime.now(UTC))
+                positions_dict['timestamp'] = self._to_redis_timestamp(datetime.now(UTC))
 
                 await redis.hset(key, str_ex_id, json.dumps(positions_dict))
                 return True
@@ -189,7 +176,7 @@ class AccountCache:
             str_ex_id = str(ex_id)
             key = "accounts"
 
-            async with self._cache._redis_context() as redis:
+            async with self._redis_context() as redis:
                 if isinstance(update_date, str) and update_date:
                     # Only update date if account exists
                     existing = await redis.hget(key, str_ex_id)
@@ -201,7 +188,7 @@ class AccountCache:
                     return False
                 else:
                     # Full upsert
-                    account['date'] = self._cache._to_redis_timestamp(datetime.now(UTC))
+                    account['date'] = self._to_redis_timestamp(datetime.now(UTC))
                     await redis.hset(key, str_ex_id, json.dumps(account))
                     return True
 
@@ -216,7 +203,7 @@ class AccountCache:
             int: Number of keys deleted (0, 1, or 2).
         """
         try:
-            async with self._cache._redis_context() as redis:
+            async with self._redis_context() as redis:
                 deleted1 = await redis.delete("account_positions")
                 deleted2 = await redis.delete("accounts")
                 return deleted1 + deleted2
@@ -232,7 +219,7 @@ class AccountCache:
         """
         positions = []
         try:
-            async with self._cache._redis_context() as redis:
+            async with self._redis_context() as redis:
                 datas = await redis.hgetall("account_positions")
                 if not datas:
                     return positions
@@ -244,7 +231,7 @@ class AccountCache:
                         root_timestamp_str = account_data.get('timestamp')
                         root_timestamp = None
                         if root_timestamp_str:
-                            dt = self._cache._from_redis_timestamp(root_timestamp_str)
+                            dt = self._from_redis_timestamp(root_timestamp_str)
                             if dt:
                                 root_timestamp = dt.timestamp()
                         ex_id = key.decode('utf-8') if isinstance(key, bytes) else key
@@ -297,7 +284,7 @@ class AccountCache:
             if not ex_id:
                 return Position(symbol=symbol)
 
-            async with self._cache._redis_context() as redis:
+            async with self._redis_context() as redis:
                 datas = await redis.hget("account_positions", str(ex_id))
                 if not datas:
                     return Position(symbol=symbol)
@@ -336,7 +323,7 @@ class AccountCache:
             dict: Account data for the currency or empty dict.
         """
         try:
-            async with self._cache._redis_context() as redis:
+            async with self._redis_context() as redis:
                 key = str(exchange)
                 data = await redis.hget("accounts", key)
                 if data:
@@ -355,7 +342,7 @@ class AccountCache:
             dict: All account data.
         """
         try:
-            async with self._cache._redis_context() as redis:
+            async with self._redis_context() as redis:
                 raw_data = await redis.hgetall("accounts")
                 decoded_data = {}
 

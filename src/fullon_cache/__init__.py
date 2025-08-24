@@ -179,8 +179,8 @@ configure_logger(
 )
 
 # Import all cache modules for easy access
-# Make docs and examples available
-from . import docs, examples
+# Make examples available
+from . import examples
 from .account_cache import AccountCache
 from .base_cache import BaseCache
 from .bot_cache import BotCache

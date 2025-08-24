@@ -16,7 +16,7 @@ from .base_cache import BaseCache
 logger = get_component_logger("fullon.cache.orders")
 
 
-class OrdersCache:
+class OrdersCache(BaseCache):
     """Cache for order queue management using Redis.
     
     This cache provides order queue management using Redis lists for queuing
@@ -68,20 +68,7 @@ class OrdersCache:
 
     def __init__(self):
         """Initialize the orders cache."""
-        self._cache = BaseCache()
-
-    async def __aenter__(self):
-        """Enter async context manager."""
-        await self._cache.__aenter__()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit async context manager with cleanup."""
-        return await self._cache.__aexit__(exc_type, exc_val, exc_tb)
-
-    async def close(self):
-        """Close the cache connection."""
-        await self._cache.close()
+        super().__init__()
 
     async def push_open_order(self, oid: str, local_oid: str) -> None:
         """Push order ID to a Redis list.
@@ -95,7 +82,7 @@ class OrdersCache:
         """
         redis_key = f"new_orders:{local_oid}"
         try:
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 await redis_client.rpush(redis_key, oid)
         except Exception as e:
             logger.error(f"Failed to push open order: {e}")
@@ -114,7 +101,7 @@ class OrdersCache:
         """
         redis_key = f"new_orders:{oid}"
         try:
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 # Use timeout=1 to avoid blocking forever in tests
                 result = await redis_client.blpop(redis_key, timeout=1)
                 if result:
@@ -151,7 +138,7 @@ class OrdersCache:
         second_key = str(oid)
 
         try:
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 # Get existing data
                 existing_data = await redis_client.hget(redis_key, second_key)
                 if existing_data:
@@ -160,7 +147,7 @@ class OrdersCache:
                     data = existing_data
 
                 # Update timestamp
-                data['timestamp'] = self._cache._to_redis_timestamp(datetime.now(UTC))
+                data['timestamp'] = self._to_redis_timestamp(datetime.now(UTC))
                 data['order_id'] = oid
 
                 # Save to hash
@@ -195,7 +182,7 @@ class OrdersCache:
         second_key = str(oid)
 
         try:
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 result = await redis_client.hget(redis_key, second_key)
                 if result:
                     data = json.loads(result)
@@ -224,7 +211,7 @@ class OrdersCache:
         orders = []
 
         try:
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 _orders = await redis_client.hgetall(redis_key)
                 if _orders:
                     for key, value in _orders.items():
@@ -256,7 +243,7 @@ class OrdersCache:
         """
         try:
             key = str(ex_id)
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 data = await redis_client.hget("accounts", key)
                 if data:
                     return json.loads(data)
@@ -320,7 +307,7 @@ class OrdersCache:
 
             # Handle timestamp
             if 'timestamp' in data:
-                clean_data['timestamp'] = self._cache._from_redis_timestamp(data['timestamp']) or datetime.now(UTC)
+                clean_data['timestamp'] = self._from_redis_timestamp(data['timestamp']) or datetime.now(UTC)
             else:
                 clean_data['timestamp'] = datetime.now(UTC)
 
@@ -359,7 +346,7 @@ class OrdersCache:
 
             # Ensure timestamp is ISO formatted
             if 'timestamp' in data and isinstance(data['timestamp'], datetime):
-                data['timestamp'] = self._cache._to_redis_timestamp(data['timestamp'])
+                data['timestamp'] = self._to_redis_timestamp(data['timestamp'])
 
             # Ensure order_id is included
             if hasattr(order, 'order_id') and order.order_id:
@@ -388,10 +375,10 @@ class OrdersCache:
             
             # Convert Order to dict for Redis storage
             order_dict = self._order_to_dict(order)
-            order_dict['timestamp'] = self._cache._to_redis_timestamp(datetime.now(UTC))
+            order_dict['timestamp'] = self._to_redis_timestamp(datetime.now(UTC))
             order_dict['order_id'] = order_id
             
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 # Store in Redis
                 await redis_client.hset(redis_key, order_id, json.dumps(order_dict))
                 
@@ -418,7 +405,7 @@ class OrdersCache:
             redis_key = f"order_status:{exchange}"
             order_id = str(order.ex_order_id or order.order_id)
             
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 # Get existing data
                 existing_data = await redis_client.hget(redis_key, order_id)
                 if existing_data:
@@ -432,7 +419,7 @@ class OrdersCache:
                             existing_dict[key] = value
                     
                     # Update timestamp
-                    existing_dict['timestamp'] = self._cache._to_redis_timestamp(datetime.now(UTC))
+                    existing_dict['timestamp'] = self._to_redis_timestamp(datetime.now(UTC))
                     
                     # Store merged data
                     await redis_client.hset(redis_key, order_id, json.dumps(existing_dict))
@@ -462,7 +449,7 @@ class OrdersCache:
         try:
             redis_key = f"order_status:{exchange}"
             
-            async with self._cache._redis_context() as redis_client:
+            async with self._redis_context() as redis_client:
                 order_data = await redis_client.hget(redis_key, str(order_id))
                 
                 if order_data:

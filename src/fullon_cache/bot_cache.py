@@ -15,7 +15,7 @@ from .base_cache import BaseCache
 logger = get_component_logger("fullon.cache.bot")
 
 
-class BotCache:
+class BotCache(BaseCache):
     """Cache for bot coordination and exchange blocking.
     
     This cache provides mechanisms for coordinating multiple trading bots,
@@ -47,20 +47,7 @@ class BotCache:
 
     def __init__(self):
         """Initialize the bot cache."""
-        self._cache = BaseCache()
-
-    async def __aenter__(self):
-        """Enter async context manager."""
-        await self._cache.__aenter__()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit async context manager with cleanup."""
-        return await self._cache.__aexit__(exc_type, exc_val, exc_tb)
-
-    async def close(self):
-        """Close the cache and cleanup resources."""
-        await self._cache.close()
+        super().__init__()
 
     async def is_blocked(self, ex_id: str, symbol: str) -> str:
         """Check if exchange/symbol is blocked.
@@ -74,7 +61,7 @@ class BotCache:
         """
         try:
             field = f"{ex_id}:{symbol}"
-            value = await self._cache.hget("block_exchange", field)
+            value = await self.hget("block_exchange", field)
             return value if value else ""
         except Exception as e:
             logger.error(f"Error checking if blocked: {e}")
@@ -88,7 +75,7 @@ class BotCache:
         """
         blocks = []
         try:
-            data = await self._cache.hgetall("block_exchange")
+            data = await self.hgetall("block_exchange")
 
             for field, value in data.items():
                 # Parse field
@@ -119,7 +106,7 @@ class BotCache:
             field = f"{ex_id}:{symbol}"
             value = str(bot_id)
             # Set in hash (returns 1 if new, 0 if updated)
-            result = await self._cache.hset("block_exchange", field, value)
+            result = await self.hset("block_exchange", field, value)
             return True  # Success regardless of new or update
         except Exception as e:
             logger.error(f"Error blocking exchange: {e}")
@@ -138,7 +125,7 @@ class BotCache:
         try:
             field = f"{ex_id}:{symbol}"
             # Delete from hash
-            deleted = await self._cache.hdel("block_exchange", field)
+            deleted = await self.hdel("block_exchange", field)
             return deleted > 0
         except Exception as e:
             logger.error(f"Error unblocking exchange: {e}")
@@ -157,7 +144,7 @@ class BotCache:
         try:
             field = f"{ex_id}:{symbol}"
             # Check if field exists in hash
-            value = await self._cache.hget("opening_position", field)
+            value = await self.hget("opening_position", field)
             return value is not None
         except Exception as e:
             logger.error(f"Error checking opening position: {e}")
@@ -178,7 +165,7 @@ class BotCache:
             field = f"{ex_id}:{symbol}"
             value = f"{bot_id}:{datetime.now(UTC).isoformat()}"
             # Set in hash
-            result = await self._cache.hset("opening_position", field, value)
+            result = await self.hset("opening_position", field, value)
             return True  # Success regardless of new or update
         except Exception as e:
             logger.error(f"Error marking opening position: {e}")
@@ -197,7 +184,7 @@ class BotCache:
         try:
             field = f"{ex_id}:{symbol}"
             # Delete from hash
-            deleted = await self._cache.hdel("opening_position", field)
+            deleted = await self.hdel("opening_position", field)
             return deleted > 0
         except Exception as e:
             logger.error(f"Error unmarking opening position: {e}")
@@ -236,7 +223,7 @@ class BotCache:
             field = str(bot_id)
             value = json.dumps(bot)
             # Save to hash
-            result = await self._cache.hset("bot_status", field, value)
+            result = await self.hset("bot_status", field, value)
             return True  # Success regardless of new or update
         except Exception as e:
             logger.error(f"Error updating bot: {e}")
@@ -254,7 +241,7 @@ class BotCache:
         try:
             field = str(bot_id)
             # Delete from hash
-            deleted = await self._cache.hdel("bot_status", field)
+            deleted = await self.hdel("bot_status", field)
             return deleted > 0
         except Exception as e:
             logger.error(f"Error deleting bot: {e}")
@@ -270,7 +257,7 @@ class BotCache:
         """
         try:
             # Delete entire key
-            deleted = await self._cache.delete("bot_status")
+            deleted = await self.delete("bot_status")
             return deleted > 0
         except Exception as e:
             logger.error(f"Error deleting all statuses: {e}")
@@ -294,7 +281,7 @@ class BotCache:
         bots = {}
         try:
             # Get all hash entries
-            data = await self._cache.hgetall("bot_status")
+            data = await self.hgetall("bot_status")
 
             for bot_id, bot_status in data.items():
                 try:

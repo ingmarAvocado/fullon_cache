@@ -13,7 +13,7 @@ from .base_cache import BaseCache
 logger = get_component_logger("fullon.cache.ohlcv")
 
 
-class OHLCVCache:
+class OHLCVCache(BaseCache):
     """Cache for OHLCV candlestick data.
     
     This cache provides simplified storage and retrieval of historical
@@ -39,20 +39,7 @@ class OHLCVCache:
 
     def __init__(self):
         """Initialize the OHLCV cache."""
-        self._cache = BaseCache()
-
-    async def __aenter__(self):
-        """Enter async context manager."""
-        await self._cache.__aenter__()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit async context manager with cleanup."""
-        return await self._cache.__aexit__(exc_type, exc_val, exc_tb)
-
-    async def close(self):
-        """Close the cache and cleanup resources."""
-        await self._cache.close()
+        super().__init__()
 
     async def update_ohlcv_bars(self, symbol: str, timeframe: str, bars: list[list[float]]) -> None:
         """Store OHLCV bars for a symbol/timeframe.
@@ -86,10 +73,10 @@ class OHLCVCache:
                 return
 
             # Store bars (append to list)
-            await self._cache.rpush(key, *bar_strings)
+            await self.rpush(key, *bar_strings)
 
             # Keep only the most recent 10000 bars
-            await self._cache.ltrim(key, -10000, -1)
+            await self.ltrim(key, -10000, -1)
 
         except Exception as e:
             logger.error(f"Error updating OHLCV bars: {e}")
@@ -114,7 +101,7 @@ class OHLCVCache:
             key = f"ohlcv:{symbol}:{timeframe}"
 
             # Get recent bars from end of list
-            bar_strings = await self._cache.lrange(key, -count, -1)
+            bar_strings = await self.lrange(key, -count, -1)
 
             bars = []
             for bar_str in bar_strings:
