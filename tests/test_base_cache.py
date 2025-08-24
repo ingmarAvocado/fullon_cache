@@ -821,3 +821,345 @@ class TestBaseCacheIntegration:
         stats = benchmark_async.stats
         assert stats['mean'] < 0.05  # Should be under 50ms (relaxed for CI)
         print(f"Average get time: {stats['mean']*1000:.2f}ms")
+
+
+class TestBaseCacheContextManager:
+    """Test async context manager functionality."""
+
+    @pytest.mark.asyncio
+    async def test_context_manager_basic_usage(self, clean_redis):
+        """Test basic context manager functionality."""
+        async with BaseCache() as cache:
+            # Test cache is usable within context
+            await cache.set("ctx_test", "test_value")
+            value = await cache.get("ctx_test")
+            assert value == "test_value"
+            
+            # Test connection is active
+            assert await cache.ping() is True
+            assert not cache._closed
+
+        # Test automatic cleanup - cache should be closed after context exits
+        assert cache._closed
+
+    @pytest.mark.asyncio
+    async def test_context_manager_with_prefix(self, clean_redis):
+        """Test context manager with key prefix."""
+        async with BaseCache(key_prefix="ctx") as cache:
+            await cache.set("prefixed_key", "prefixed_value")
+            assert await cache.get("prefixed_key") == "prefixed_value"
+            
+        # Verify key was properly prefixed in Redis
+        verify_cache = BaseCache()
+        assert await verify_cache.get("ctx:prefixed_key") == "prefixed_value"
+        await verify_cache.close()
+
+    @pytest.mark.asyncio
+    async def test_context_manager_exception_handling(self, clean_redis):
+        """Test that cleanup happens even when exceptions occur."""
+        cache = None
+        
+        with pytest.raises(ValueError):
+            async with BaseCache() as cache:
+                # Verify cache is working
+                await cache.set("exception_test", "before_exception") 
+                assert await cache.get("exception_test") == "before_exception"
+                assert not cache._closed
+                
+                # Raise exception to test cleanup
+                raise ValueError("Test exception")
+        
+        # Should still be cleaned up despite exception
+        assert cache._closed
+
+    @pytest.mark.asyncio
+    async def test_context_manager_nested_usage(self, clean_redis):
+        """Test nested context manager usage."""
+        async with BaseCache(key_prefix="outer") as outer_cache:
+            await outer_cache.set("outer_key", "outer_value")
+            
+            async with BaseCache(key_prefix="inner") as inner_cache:
+                await inner_cache.set("inner_key", "inner_value")
+                
+                # Both should work
+                assert await outer_cache.get("outer_key") == "outer_value"
+                assert await inner_cache.get("inner_key") == "inner_value"
+                assert not outer_cache._closed
+                assert not inner_cache._closed
+            
+            # Inner should be closed, outer still open
+            assert inner_cache._closed
+            assert not outer_cache._closed
+            
+        # Both should be closed now
+        assert outer_cache._closed
+        assert inner_cache._closed
+
+    @pytest.mark.asyncio
+    async def test_context_manager_complex_operations(self, clean_redis):
+        """Test complex operations within context manager."""
+        async with BaseCache() as cache:
+            # Hash operations
+            await cache.hset("ctx_hash", "field1", "value1")
+            await cache.hset("ctx_hash", "field2", "value2")
+            hash_data = await cache.hgetall("ctx_hash")
+            assert hash_data["field1"] == "value1"
+            assert hash_data["field2"] == "value2"
+            
+            # List operations
+            await cache.lpush("ctx_list", "item1", "item2")
+            assert await cache.llen("ctx_list") == 2
+            
+            # JSON operations
+            test_data = {"key": "value", "number": 42}
+            await cache.set_json("ctx_json", test_data)
+            retrieved = await cache.get_json("ctx_json")
+            assert retrieved == test_data
+
+    @pytest.mark.asyncio
+    async def test_context_manager_pub_sub(self, clean_redis):
+        """Test pub/sub operations within context manager."""
+        async with BaseCache() as cache:
+            # Test publishing
+            subscribers = await cache.publish("ctx_channel", "test_message")
+            # No subscribers yet, so should return 0
+            assert subscribers == 0
+            
+            # Test that publish didn't break anything
+            await cache.set("pub_test", "after_publish")
+            assert await cache.get("pub_test") == "after_publish"
+
+    @pytest.mark.asyncio
+    async def test_context_manager_already_closed_error(self, clean_redis):
+        """Test that using closed cache raises error."""
+        cache = BaseCache()
+        await cache.close()
+        
+        with pytest.raises(ConnectionError, match="Cache is closed"):
+            async with cache:
+                pass
+
+    @pytest.mark.asyncio
+    async def test_context_manager_manual_close_within_context(self, clean_redis):
+        """Test manual close within context doesn't break cleanup."""
+        async with BaseCache() as cache:
+            await cache.set("manual_close_test", "value")
+            
+            # Manual close
+            await cache.close()
+            assert cache._closed
+            
+            # Should not be able to perform operations after manual close
+            with pytest.raises(ConnectionError, match="Cache is closed"):
+                await cache.get("manual_close_test")
+        
+        # Should still be closed
+        assert cache._closed
+
+    @pytest.mark.asyncio
+    async def test_context_manager_multiple_sequential(self, clean_redis):
+        """Test multiple sequential context manager uses."""
+        # First context
+        async with BaseCache() as cache1:
+            await cache1.set("seq1", "value1")
+            assert await cache1.get("seq1") == "value1"
+        
+        assert cache1._closed
+        
+        # Second context
+        async with BaseCache() as cache2:
+            assert await cache2.get("seq1") == "value1"  # Should persist
+            await cache2.set("seq2", "value2")
+            
+        assert cache2._closed
+        
+        # Third context
+        async with BaseCache() as cache3:
+            assert await cache3.get("seq1") == "value1"
+            assert await cache3.get("seq2") == "value2"
+            
+        assert cache3._closed
+
+    @pytest.mark.asyncio
+    async def test_context_manager_concurrent_usage(self, clean_redis):
+        """Test concurrent context manager usage."""
+        async def cache_worker(worker_id: int):
+            async with BaseCache(key_prefix=f"worker{worker_id}") as cache:
+                await cache.set("id", str(worker_id))
+                await asyncio.sleep(0.1)  # Simulate work
+                value = await cache.get("id")
+                assert value == str(worker_id)
+                return worker_id
+        
+        # Run 5 workers concurrently
+        tasks = [cache_worker(i) for i in range(5)]
+        results = await asyncio.gather(*tasks)
+        
+        # All workers should complete successfully
+        assert sorted(results) == list(range(5))
+
+    @pytest.mark.asyncio
+    async def test_context_manager_pubsub_cleanup(self, clean_redis):
+        """Test that pubsub clients are properly cleaned up."""
+        cache = None
+        
+        async with BaseCache() as cache:
+            # Create a pubsub client (this should add to _pubsub_clients)
+            redis_client = await cache._get_redis()
+            pubsub = redis_client.pubsub()
+            await pubsub.subscribe("test_channel")
+            
+            # Manually add to cache's pubsub clients to track
+            cache._pubsub_clients["test_client"] = pubsub
+            
+            # Verify it's tracked
+            assert len(cache._pubsub_clients) == 1
+            assert "test_client" in cache._pubsub_clients
+            assert not cache._closed
+            
+        # After context exit, pubsub clients should be cleaned up
+        assert cache._closed
+        assert len(cache._pubsub_clients) == 0
+
+    @pytest.mark.asyncio
+    async def test_context_manager_operations_after_close(self, clean_redis):
+        """Test that operations fail after context manager closes the cache."""
+        cache = None
+        
+        async with BaseCache() as cache:
+            # Verify cache works within context
+            await cache.set("test_key", "test_value")
+            assert await cache.get("test_key") == "test_value"
+            
+        # After context, cache should be closed and operations should fail
+        assert cache._closed
+        
+        with pytest.raises(ConnectionError, match="Cache is closed"):
+            await cache.set("another_key", "value")
+            
+        with pytest.raises(ConnectionError, match="Cache is closed"):
+            await cache.get("test_key")
+
+    @pytest.mark.asyncio
+    async def test_context_manager_double_close_safety(self, clean_redis):
+        """Test that calling close multiple times is safe."""
+        async with BaseCache() as cache:
+            # Manually close within context
+            await cache.close()
+            assert cache._closed
+            
+            # Calling close again should be safe (idempotent)
+            await cache.close()
+            assert cache._closed
+            
+        # Context manager __aexit__ calls close again - should be safe
+        assert cache._closed
+
+    @pytest.mark.asyncio 
+    async def test_context_manager_resource_cleanup_on_exception(self, clean_redis):
+        """Test that resources are cleaned up even when exceptions occur."""
+        cache = None
+        
+        try:
+            async with BaseCache() as cache:
+                # Create some resources
+                await cache.set("resource_test", "value")
+                
+                # Add a pubsub client to track cleanup
+                redis_client = await cache._get_redis()
+                pubsub = redis_client.pubsub()
+                await pubsub.subscribe("exception_channel") 
+                cache._pubsub_clients["exception_test"] = pubsub
+                
+                assert len(cache._pubsub_clients) == 1
+                assert not cache._closed
+                
+                # Force an exception
+                raise RuntimeError("Test exception for cleanup verification")
+                
+        except RuntimeError:
+            pass  # Expected exception
+        
+        # Verify cleanup happened despite the exception
+        assert cache._closed
+        assert len(cache._pubsub_clients) == 0
+
+    @pytest.mark.asyncio
+    async def test_derived_cache_context_cleanup(self, clean_redis):
+        """Test that derived cache classes properly delegate cleanup."""
+        from fullon_cache import AccountCache, BotCache, OrdersCache
+        
+        # Test AccountCache
+        async with AccountCache() as account_cache:
+            assert hasattr(account_cache, '_cache')
+            assert not account_cache._cache._closed
+        assert account_cache._cache._closed
+        
+        # Test BotCache  
+        async with BotCache() as bot_cache:
+            assert hasattr(bot_cache, '_cache')
+            assert not bot_cache._cache._closed
+        assert bot_cache._cache._closed
+        
+        # Test OrdersCache
+        async with OrdersCache() as orders_cache:
+            assert hasattr(orders_cache, '_cache')
+            assert not orders_cache._cache._closed
+        assert orders_cache._cache._closed
+
+    @pytest.mark.asyncio
+    async def test_context_manager_connection_state_verification(self, clean_redis):
+        """Test that context managers properly manage connection state."""
+        cache = None
+        
+        async with BaseCache() as cache:
+            # Should be able to get a connection
+            conn = await cache._get_redis()
+            assert conn is not None
+            
+            # Connection should work
+            await conn.ping()
+            await conn.aclose()  # Clean up this test connection
+            
+        # After context exit, should not be able to get connections
+        assert cache._closed
+        
+        with pytest.raises(ConnectionError, match="Cache is closed"):
+            await cache._get_redis()
+
+    @pytest.mark.asyncio
+    async def test_context_manager_cleanup_verification_real_scenario(self, clean_redis):
+        """Test a realistic scenario with actual cache operations and verify cleanup."""
+        cache = None
+        
+        async with BaseCache(key_prefix="test_scenario") as cache:
+            # Perform various operations that might create resources
+            await cache.set("key1", "value1")
+            await cache.hset("hash1", "field1", "value1") 
+            await cache.lpush("list1", "item1", "item2")
+            
+            # Set JSON data
+            await cache.set_json("json_data", {"user": "test", "score": 100})
+            
+            # Verify everything works
+            assert await cache.get("key1") == "value1"
+            assert await cache.hget("hash1", "field1") == "value1"
+            assert await cache.llen("list1") == 2
+            json_data = await cache.get_json("json_data")
+            assert json_data["user"] == "test"
+            
+            # Cache should be active
+            assert not cache._closed
+        
+        # After context exit, cache should be closed and unusable
+        assert cache._closed
+        
+        # Verify data persisted in Redis (via new cache instance)
+        verify_cache = BaseCache(key_prefix="test_scenario")
+        try:
+            assert await verify_cache.get("key1") == "value1"
+            assert await verify_cache.hget("hash1", "field1") == "value1"
+            json_data = await verify_cache.get_json("json_data")
+            assert json_data["user"] == "test"
+        finally:
+            await verify_cache.close()

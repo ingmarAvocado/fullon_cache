@@ -41,6 +41,19 @@ class OHLCVCache:
         """Initialize the OHLCV cache."""
         self._cache = BaseCache()
 
+    async def __aenter__(self):
+        """Enter async context manager."""
+        await self._cache.__aenter__()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Exit async context manager with cleanup."""
+        return await self._cache.__aexit__(exc_type, exc_val, exc_tb)
+
+    async def close(self):
+        """Close the cache and cleanup resources."""
+        await self._cache.close()
+
     async def update_ohlcv_bars(self, symbol: str, timeframe: str, bars: list[list[float]]) -> None:
         """Store OHLCV bars for a symbol/timeframe.
         

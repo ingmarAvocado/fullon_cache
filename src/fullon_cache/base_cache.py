@@ -39,22 +39,33 @@ class BaseCache:
         - Key pattern operations (scan, delete by pattern)
         - Error handling with automatic retries
         - Transaction support with pipelines
+        - Async context manager support for automatic cleanup
         
     Example:
-        cache = BaseCache()
+        # Context manager (recommended for automatic cleanup)
+        async with BaseCache() as cache:
+            await cache.set("key", "value")
+            value = await cache.get("key")
+        # Automatically closed
         
-        # Basic operations
-        await cache.set("key", "value")
-        value = await cache.get("key")
+        # Manual management
+        cache = BaseCache()
+        try:
+            await cache.set("key", "value")
+            value = await cache.get("key")
+        finally:
+            await cache.close()
         
         # Complex data
-        await cache.set_json("user:123", {"name": "John", "age": 30})
-        user = await cache.get_json("user:123")
+        async with BaseCache() as cache:
+            await cache.set_json("user:123", {"name": "John", "age": 30})
+            user = await cache.get_json("user:123")
         
         # Pub/Sub
-        await cache.publish("channel", "message")
-        async for message in cache.subscribe("channel"):
-            print(message)
+        async with BaseCache() as cache:
+            await cache.publish("channel", "message")
+            async for message in cache.subscribe("channel"):
+                print(message)
     """
 
     def __init__(self, key_prefix: str = "", decode_responses: bool = True):
@@ -88,6 +99,36 @@ class BaseCache:
 
         # Mark as closed
         self._closed = True
+
+    async def __aenter__(self):
+        """Enter async context manager.
+        
+        Returns:
+            Self for fluent interface usage
+            
+        Raises:
+            ConnectionError: If cache is already closed
+        """
+        if self._closed:
+            raise ConnectionError("Cache is closed")
+        
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Exit async context manager with cleanup.
+        
+        Performs automatic resource cleanup by calling close().
+        
+        Args:
+            exc_type: Exception type (if any)
+            exc_val: Exception value (if any)  
+            exc_tb: Exception traceback (if any)
+            
+        Returns:
+            False to propagate exceptions
+        """
+        await self.close()
+        return False
 
     def _make_key(self, key: str) -> str:
         """Add prefix to key if configured.

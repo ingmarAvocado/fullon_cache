@@ -1,45 +1,90 @@
-"""Documentation module for Fullon Cache.
+"""Documentation module for fullon_cache.
 
-This module contains documentation strings and guides for using the cache system.
+This module provides comprehensive documentation for the fullon_cache library,
+including quick start guides, API references, and usage examples.
 """
 
-# Placeholder documentation - should be implemented later
 QUICKSTART = """
-# Fullon Cache Quickstart Guide
+# Fullon Cache Quick Start Guide
 
 ## Installation
+
+The fullon_cache library is designed to be used as part of the fullon trading system.
+Install it using poetry:
+
 ```bash
-pip install fullon-cache[uvloop]
+poetry install
 ```
 
 ## Basic Usage
+
+All cache classes support async context managers for automatic resource cleanup:
+
 ```python
-import asyncio
 from fullon_cache import TickCache
-from fullon_orm.models import Tick, Symbol
 
-async def main():
-    cache = TickCache()
+# Recommended: use context manager for automatic cleanup
+async with TickCache() as cache:
+    await cache.update_ticker("binance", "BTC/USDT", {
+        "symbol": "BTC/USDT", 
+        "last": 50000.0,
+        "bid": 49950.0,
+        "ask": 50050.0
+    })
     
-    # Create symbol and tick
-    symbol = Symbol(symbol="BTC/USDT", cat_ex_id=1, base="BTC", quote="USDT")
-    tick = Tick(symbol="BTC/USDT", exchange="binance", price=50000.0, volume=100.0, time=time.time())
-    
-    # Store and retrieve
-    await cache.set_ticker(symbol, tick)
-    result = await cache.get_ticker(symbol)
-    
+    ticker = await cache.get_ticker("binance", "BTC/USDT")
+    print(f"BTC/USDT: ${ticker['last']}")
+
+# Manual resource management (if needed)
+cache = TickCache()
+try:
+    await cache.update_ticker("binance", "BTC/USDT", {...})
+finally:
     await cache.close()
-
-if __name__ == "__main__":
-    asyncio.run(main())
 ```
+
+## Available Cache Classes
+
+- BaseCache: Foundation class with Redis operations
+- TickCache: Real-time ticker data with pub/sub
+- AccountCache: User positions and account data
+- OrdersCache: Order queue management
+- TradesCache: Trade data queuing
+- BotCache: Bot coordination and blocking
+- ProcessCache: Process monitoring
+- OHLCVCache: Candlestick data storage
+
+## Key Features
+
+- 100% async/await support
+- Context manager support for automatic cleanup
+- Redis-backed with connection pooling
+- fullon_orm integration for type safety
+- Comprehensive error handling
+- Structured logging with fullon-log
+- Parallel testing support
 """
 
-def get_all_docs():
-    """Get all available documentation."""
-    return {
-        'quickstart': QUICKSTART,
-    }
+API_REFERENCE = """
+# API Reference
 
-__all__ = ['QUICKSTART', 'get_all_docs']
+For detailed API documentation, use Python's built-in help system:
+
+```python
+from fullon_cache import TickCache
+help(TickCache)
+```
+
+Each cache class has comprehensive docstrings with examples.
+"""
+
+def get_all_docs() -> dict[str, str]:
+    """Get all available documentation.
+    
+    Returns:
+        Dict mapping doc names to content
+    """
+    return {
+        "QUICKSTART": QUICKSTART,
+        "API_REFERENCE": API_REFERENCE,
+    }
