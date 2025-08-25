@@ -27,7 +27,13 @@ from fullon_cache import (
 ```python
 async with TickCache() as cache:
     # Set ticker data
-    from fullon_orm.models import Tick
+    from fullon_orm.models import Tick, Symbol
+    import time
+    
+    # Create symbol object
+    symbol = Symbol(symbol="BTC/USDT", cat_ex_id=1, base="BTC", quote="USDT")
+    
+    # Create tick with all required data
     tick = Tick(
         symbol="BTC/USDT",
         exchange="binance", 
@@ -37,10 +43,10 @@ async with TickCache() as cache:
         ask=50001.0,
         time=time.time()
     )
-    await cache.set_ticker(symbol_obj, tick)
+    await cache.set_ticker(tick)  # Only pass the tick object
     
     # Get ticker data
-    ticker = await cache.get_ticker(symbol_obj, "binance")
+    ticker = await cache.get_ticker(symbol, "binance")
     print(f"Price: ${ticker.price}")
 ```
 

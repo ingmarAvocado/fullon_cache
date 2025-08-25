@@ -32,8 +32,8 @@ tick = Tick(
 )
 
 # Ticker Operations (fullon_orm models as input/output)
-async def set_ticker(symbol: Symbol, tick: Tick) -> bool
-async def get_ticker(symbol: Symbol, exchange: str) -> Tick | None
+async def set_ticker(tick: Tick) -> bool                              # Set ticker using Tick object only
+async def get_ticker(symbol: Symbol, exchange: str) -> Tick | None    # Get ticker for symbol/exchange
 async def update_ticker(exchange: str, symbol: str, tick_data: dict) -> bool
 async def get_price(symbol: str, exchange: str = None) -> float
 ```

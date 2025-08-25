@@ -91,7 +91,7 @@ async def basic_ticker_operations(
                     last=current_price,
                 )
 
-                success = await cache.set_ticker(symbol, tick)
+                success = await cache.set_ticker(tick)
                 if success:
                     ticker_count += 1
                     if verbose:
@@ -216,7 +216,7 @@ async def ticker_publisher(
                     last=current_price,
                 )
 
-                success = await cache.set_ticker(symbol, tick)
+                success = await cache.set_ticker(tick)
                 if success:
                     stats[symbol.symbol] += 1
                     if verbose:
