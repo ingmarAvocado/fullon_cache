@@ -45,20 +45,19 @@ def create_test_tick(symbol="BTC/USDT", exchange="binance", price=50000.0):
 
 
 def create_test_order(symbol="BTC/USDT", ex_id="binance", side="buy", volume=0.1):
-    """Factory for test Order data (as dict)."""
-    return {
-        "ex_order_id": "ORD_67890",
-        "ex_id": ex_id,
-        "symbol": symbol,
-        "side": side,
-        "order_type": "market",
-        "volume": volume,
-        "price": 50000.0,
-        "cost": 5000.0,
-        "fee": 5.0,
-        "uid": "user_123",
-        "status": "open"
-    }
+    """Factory for test Order objects."""
+    return Order(
+        ex_order_id="ORD_67890",
+        ex_id=ex_id,
+        symbol=symbol,
+        side=side,
+        order_type="market",
+        volume=volume,
+        price=50000.0,
+        uid="user_123",
+        status="open",
+        timestamp=datetime.now(UTC)
+    )
 
 
 def create_test_trade(symbol="BTC/USDT", ex_id="binance", volume=0.1):
@@ -112,19 +111,17 @@ class TestEndToEndTradingFlow:
             # 2. Create and submit order
             order = create_test_order("BTC/USDT", "binance", "buy", 0.1)
             
-            await orders_cache.push_open_order(order["ex_order_id"], "LOCAL_ORDER")
-            await orders_cache.save_order_data("binance", order["ex_order_id"], order)
+            await orders_cache.push_open_order(order.ex_order_id, "LOCAL_ORDER")
+            await orders_cache.save_order_data("binance", order)
             
             # 3. Process order (simulate exchange processing)
             order_id = await orders_cache.pop_open_order("LOCAL_ORDER")
-            assert order_id == order["ex_order_id"]
+            assert order_id == order.ex_order_id
             
             # 4. Order gets filled - update status
-            await orders_cache.save_order_data(
-                "binance", 
-                order["ex_order_id"], 
-                {"status": "filled", "final_volume": 0.1}
-            )
+            order.status = "filled"
+            order.final_volume = 0.1
+            await orders_cache.save_order_data("binance", order)
             
             # 5. Record trade from fill
             trade = create_test_trade("BTC/USDT", "binance", 0.1)
@@ -136,7 +133,7 @@ class TestEndToEndTradingFlow:
             
             # 7. Verify final state
             # Order should be filled
-            final_order = await orders_cache.get_order_status("binance", order["ex_order_id"])
+            final_order = await orders_cache.get_order_status("binance", order.ex_order_id)
             assert final_order.status == "filled"
             assert final_order.final_volume == 0.1
             
@@ -177,10 +174,10 @@ class TestEndToEndTradingFlow:
                 """Simulate order processing."""
                 for i in range(5):
                     order = create_test_order("BTC/USDT", "binance", "buy", 0.1)
-                    order["ex_order_id"] = f"ORD_{i}"
+                    order.ex_order_id = f"ORD_{i}"
                     
-                    await orders_cache.push_open_order(order["ex_order_id"], f"LOCAL_{i}")
-                    await orders_cache.save_order_data("binance", order["ex_order_id"], order)
+                    await orders_cache.push_open_order(order.ex_order_id, f"LOCAL_{i}")
+                    await orders_cache.save_order_data("binance", order)
                     await asyncio.sleep(0.02)
             
             async def record_trades():
@@ -227,15 +224,16 @@ class TestTradingFlowErrorHandling:
         trades_cache = TradesCache()
         
         try:
-            # Test invalid order data
-            invalid_order_data = {
-                "symbol": "",  # Invalid empty symbol
-                "side": "invalid_side",  # Invalid side
-                "volume": -1.0,  # Invalid negative volume
-            }
+            # Test invalid order data - create Order with problematic values
+            invalid_order = create_test_order(
+                symbol="",  # Empty symbol
+                side="invalid_side",  # Invalid side
+                volume=-1.0,  # Invalid negative volume
+                order_id="INVALID_ORDER"
+            )
             
             # Should handle gracefully
-            await orders_cache.save_order_data("binance", "INVALID_ORDER", invalid_order_data)
+            await orders_cache.save_order_data("binance", invalid_order)
             
             # Order should still be retrievable (cache doesn't validate)
             order = await orders_cache.get_order_status("binance", "INVALID_ORDER")
