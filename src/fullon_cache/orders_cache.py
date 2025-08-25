@@ -120,15 +120,13 @@ class OrdersCache(BaseCache):
     async def save_order_data(
         self,
         ex_id: str,
-        oid: str,
-        data: dict = {}
+        order: Order
     ) -> None:
-        """Save order data to Redis hash.
+        """Save order data to Redis hash using fullon_orm Order model.
         
         Args:
             ex_id: The exchange ID
-            oid: The order ID
-            data: Order data dictionary
+            order: fullon_orm Order model
             
         Returns:
             None
@@ -136,27 +134,35 @@ class OrdersCache(BaseCache):
         Raises:
             Exception: If there was an error saving to Redis
         """
+        # Extract order ID from Order model
+        oid = str(order.ex_order_id or order.order_id)
         redis_key = f"order_status:{ex_id}"
-        second_key = str(oid)
+        second_key = oid
 
         try:
             async with self._redis_context() as redis_client:
-                # Get existing data
+                # Convert Order to dict for Redis storage
+                order_dict = self._order_to_dict(order)
+                
+                # Get existing data for merging
                 existing_data = await redis_client.hget(redis_key, second_key)
                 if existing_data:
-                    existing_data = json.loads(existing_data)
-                    existing_data.update(data)
-                    data = existing_data
+                    existing_dict = json.loads(existing_data)
+                    # Merge with new data from Order model
+                    for key, value in order_dict.items():
+                        if value is not None:
+                            existing_dict[key] = value
+                    order_dict = existing_dict
 
-                # Update timestamp
-                data['timestamp'] = self._to_redis_timestamp(datetime.now(UTC))
-                data['order_id'] = oid
+                # Update timestamp and order_id
+                order_dict['timestamp'] = self._to_redis_timestamp(datetime.now(UTC))
+                order_dict['order_id'] = oid
 
                 # Save to hash
-                await redis_client.hset(redis_key, second_key, json.dumps(data))
+                await redis_client.hset(redis_key, second_key, json.dumps(order_dict))
 
                 # Set expiration for cancelled orders
-                if data.get('status') == "canceled":
+                if order_dict.get('status') == "canceled":
                     await redis_client.expire(redis_key, 60 * 60)  # 1 hour
 
         except Exception as e:

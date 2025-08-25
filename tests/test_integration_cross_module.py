@@ -44,6 +44,25 @@ def create_test_tick(symbol="BTC/USDT", exchange="binance", price=50000.0):
     )
 
 
+def create_test_order(symbol="BTC/USDT", side="buy", volume=0.1, order_id="ORD_001", exchange="binance", **kwargs):
+    """Factory for test Order objects."""
+    return Order(
+        ex_order_id=order_id,
+        ex_id=exchange,
+        symbol=symbol,
+        side=side,
+        order_type=kwargs.get("order_type", "market"),
+        volume=volume,
+        price=kwargs.get("price", 50000.0),
+        uid=kwargs.get("uid", "user_123"),
+        status=kwargs.get("status", "open"),
+        bot_id=kwargs.get("bot_id", 123),
+        cat_ex_id=kwargs.get("cat_ex_id", 1),
+        final_volume=kwargs.get("final_volume"),
+        timestamp=kwargs.get("timestamp", datetime.now(UTC))
+    )
+
+
 
 class TestTickOrderIntegration:
     """Test integration between TickCache and OrdersCache."""
@@ -61,16 +80,18 @@ class TestTickOrderIntegration:
             await tick_cache.update_ticker("binance", tick)
             
             # 2. Create order at current price
-            order_data = {
-                "symbol": "BTC/USDT",
-                "side": "buy",
-                "order_type": "limit",
-                "volume": 0.1,
-                "price": 50000.0,
-                "status": "open"
-            }
+            order = create_test_order(
+                symbol="BTC/USDT",
+                side="buy",
+                order_type="limit",
+                volume=0.1,
+                price=50000.0,
+                status="open",
+                order_id="ORD_001",
+                exchange="binance"
+            )
             
-            await orders_cache.save_order_data("binance", "ORD_001", order_data)
+            await orders_cache.save_order_data("binance", order)
             
             # 3. Update price (simulate market movement)
             new_tick = create_test_tick("BTC/USDT", "binance", 50500.0)
@@ -86,11 +107,17 @@ class TestTickOrderIntegration:
             assert order.price == 50000.0  # Order price unchanged
             
             # 6. Simulate order fill due to price movement
-            await orders_cache.save_order_data(
-                "binance", 
-                "ORD_001", 
-                {"status": "filled", "fill_price": 50000.0}
+            filled_order = create_test_order(
+                symbol="BTC/USDT",
+                side="buy",
+                order_type="limit",
+                volume=0.1,
+                price=50000.0,
+                status="filled",
+                order_id="ORD_001",
+                exchange="binance"
             )
+            await orders_cache.save_order_data("binance", filled_order)
             
             # 7. Verify order is filled
             filled_order = await orders_cache.get_order_status("binance", "ORD_001")
@@ -121,14 +148,16 @@ class TestTickOrderIntegration:
             
             # 2. Create orders for all symbols
             for i, (symbol, price) in enumerate(symbols_data):
-                order_data = {
-                    "symbol": symbol,
-                    "side": "buy",
-                    "volume": 0.1,
-                    "price": price,
-                    "status": "open"
-                }
-                await orders_cache.save_order_data("binance", f"ORD_{i}", order_data)
+                order = create_test_order(
+                    symbol=symbol,
+                    side="buy",
+                    volume=0.1,
+                    price=price,
+                    status="open",
+                    order_id=f"ORD_{i}",
+                    exchange="binance"
+                )
+                await orders_cache.save_order_data("binance", order)
             
             # 3. Verify all prices are current
             for symbol, expected_price in symbols_data:
@@ -173,28 +202,32 @@ class TestOrderTradeAccountIntegration:
             await account_cache.upsert_positions(1, [initial_position])
             
             # 2. Create buy order
-            order_data = {
-                "symbol": "BTC/USDT",
-                "side": "buy", 
-                "volume": 0.1,
-                "price": 50000.0,
-                "status": "open",
-                "uid": "123"
-            }
+            buy_order = create_test_order(
+                symbol="BTC/USDT",
+                side="buy",
+                volume=0.1,
+                price=50000.0,
+                status="open",
+                uid="123",
+                order_id="ORD_BUY",
+                exchange="binance"
+            )
             
-            await orders_cache.save_order_data("binance", "ORD_BUY", order_data)
+            await orders_cache.save_order_data("binance", buy_order)
             
             # 3. Fill the order
-            await orders_cache.save_order_data(
-                "binance",
-                "ORD_BUY",
-                {
-                    "status": "filled",
-                    "final_volume": 0.1,
-                    "fill_price": 50000.0,
-                    "fee": 5.0
-                }
+            filled_buy_order = create_test_order(
+                symbol="BTC/USDT",
+                side="buy",
+                volume=0.1,
+                price=50000.0,
+                status="filled",
+                final_volume=0.1,
+                uid="123",
+                order_id="ORD_BUY",
+                exchange="binance"
             )
+            await orders_cache.save_order_data("binance", filled_buy_order)
             
             # 4. Record trade from the fill
             trade_data = {
@@ -278,17 +311,19 @@ class TestOrderTradeAccountIntegration:
                 cost = volume * price
                 
                 # Create and fill order
-                order_data = {
-                    "symbol": "ETH/USDT",
-                    "side": "buy",
-                    "volume": volume,
-                    "price": price,
-                    "status": "filled",
-                    "final_volume": volume,
-                    "uid": "456"
-                }
+                order = create_test_order(
+                    symbol="ETH/USDT",
+                    side="buy",
+                    volume=volume,
+                    price=price,
+                    status="filled",
+                    final_volume=volume,
+                    uid="456",
+                    order_id=f"ORD_{i}",
+                    exchange="kraken"
+                )
                 
-                await orders_cache.save_order_data("kraken", f"ORD_{i}", order_data)
+                await orders_cache.save_order_data("kraken", order)
                 
                 # Record trade
                 trade_data = {
@@ -365,16 +400,18 @@ class TestBotCacheIntegration:
             assert result is True
             
             # 3. Bot 1 creates an order
-            order_data = {
-                "symbol": "BTC/USDT",
-                "side": "buy",
-                "volume": 0.1,
-                "price": 50000.0,
-                "status": "open",
-                "bot_id": "bot_1"
-            }
+            bot_order = create_test_order(
+                symbol="BTC/USDT",
+                side="buy",
+                volume=0.1,
+                price=50000.0,
+                status="open",
+                bot_id="bot_1",
+                order_id="BOT1_ORD",
+                exchange="binance"
+            )
             
-            await orders_cache.save_order_data("binance", "BOT1_ORD", order_data)
+            await orders_cache.save_order_data("binance", bot_order)
             
             # 4. Verify bot 1 has control
             blocking_bot = await bot_cache.is_blocked("binance", "BTC/USDT")
@@ -386,11 +423,17 @@ class TestBotCacheIntegration:
             assert is_opening is True
             
             # 6. Simulate order completion and cleanup
-            await orders_cache.save_order_data(
-                "binance",
-                "BOT1_ORD", 
-                {"status": "filled"}
+            filled_bot_order = create_test_order(
+                symbol="BTC/USDT",
+                side="buy",
+                volume=0.1,
+                price=50000.0,
+                status="filled",
+                bot_id="bot_1",
+                order_id="BOT1_ORD",
+                exchange="binance"
             )
+            await orders_cache.save_order_data("binance", filled_bot_order)
             
             # 7. Bot 1 releases control
             await bot_cache.unmark_opening_position("binance", "BTC/USDT")
@@ -432,16 +475,18 @@ class TestBotCacheIntegration:
                 assert result is True
                 
                 # Create order for the bot
-                order_data = {
-                    "symbol": symbol,
-                    "side": "buy",
-                    "volume": 0.1,
-                    "price": 1000.0 * (i + 1),  # Different prices
-                    "status": "open",
-                    "bot_id": bot
-                }
+                order = create_test_order(
+                    symbol=symbol,
+                    side="buy",
+                    volume=0.1,
+                    price=1000.0 * (i + 1),  # Different prices
+                    status="open",
+                    bot_id=bot,
+                    order_id=f"{bot}_ORD",
+                    exchange="binance"
+                )
                 
-                await orders_cache.save_order_data("binance", f"{bot}_ORD", order_data)
+                await orders_cache.save_order_data("binance", order)
             
             # 2. Verify each bot controls its symbol
             for bot, symbol in zip(bots, symbols):
@@ -470,11 +515,21 @@ class TestBotCacheIntegration:
                 await bot_cache.mark_opening_position("binance", symbol, bot)
                 
                 # Fill order
-                await orders_cache.save_order_data(
-                    "binance",
-                    f"{bot}_ORD",
-                    {"status": "filled"}
+                # Need to find original symbol for this bot
+                bot_symbol = symbols[bots.index(bot)]
+                bot_price = 1000.0 * (bots.index(bot) + 1)
+                
+                filled_order = create_test_order(
+                    symbol=bot_symbol,
+                    side="buy",
+                    volume=0.1,
+                    price=bot_price,
+                    status="filled",
+                    bot_id=bot,
+                    order_id=f"{bot}_ORD",
+                    exchange="binance"
                 )
+                await orders_cache.save_order_data("binance", filled_order)
                 
                 # Complete and release
                 await bot_cache.unmark_opening_position("binance", symbol)

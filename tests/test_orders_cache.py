@@ -7,6 +7,31 @@ import pytest
 from fullon_orm.models import Order
 
 
+def create_test_order(symbol="BTC/USDT", side="buy", volume=0.1, order_id="ORD_001", exchange="binance", **kwargs):
+    """Factory for test Order objects."""
+    return Order(
+        ex_order_id=order_id,
+        ex_id=kwargs.get("ex_id", exchange),  # Allow ex_id to be overridden via kwargs
+        symbol=symbol,
+        side=side,
+        order_type=kwargs.get("order_type", "market"),
+        volume=volume,
+        price=kwargs.get("price", 50000.0),
+        uid=kwargs.get("uid", "user_123"),
+        status=kwargs.get("status", "open"),
+        bot_id=kwargs.get("bot_id", 123),
+        cat_ex_id=kwargs.get("cat_ex_id", 1),
+        final_volume=kwargs.get("final_volume"),
+        plimit=kwargs.get("plimit"),
+        tick=kwargs.get("tick"),
+        futures=kwargs.get("futures"),
+        leverage=kwargs.get("leverage"),
+        command=kwargs.get("command"),
+        reason=kwargs.get("reason"),
+        timestamp=kwargs.get("timestamp", datetime.now(UTC))
+    )
+
+
 class TestOrdersCacheLegacyMethods:
     """Test legacy methods for backward compatibility."""
 
@@ -44,20 +69,21 @@ class TestOrdersCacheLegacyMethods:
 
     @pytest.mark.asyncio
     async def test_save_order_data(self, orders_cache):
-        """Test legacy save_order_data method."""
-        order_data = {
-            "symbol": "BTC/USDT",
-            "side": "buy",
-            "volume": 0.1,
-            "price": 50000.0,
-            "status": "open",
-            "bot_id": 123,
-            "uid": 456,
-            "ex_id": 789
-        }
+        """Test save_order_data method with Order model."""
+        order = create_test_order(
+            symbol="BTC/USDT",
+            side="buy",
+            volume=0.1,
+            price=50000.0,
+            status="open",
+            bot_id=123,
+            uid=456,
+            order_id="ORD789",
+            exchange="binance"
+        )
 
         # Save order data
-        await orders_cache.save_order_data("binance", "ORD789", order_data)
+        await orders_cache.save_order_data("binance", order)
 
         # Retrieve using legacy method
         retrieved = await orders_cache.get_order_status("binance", "ORD789")
@@ -73,10 +99,23 @@ class TestOrdersCacheLegacyMethods:
     async def test_save_order_data_update(self, orders_cache):
         """Test updating existing order data."""
         # Save initial data
-        await orders_cache.save_order_data("binance", "ORD999", {"status": "open", "volume": 1.0})
+        initial_order = create_test_order(
+            status="open",
+            volume=1.0,
+            order_id="ORD999",
+            exchange="binance"
+        )
+        await orders_cache.save_order_data("binance", initial_order)
 
         # Update with new data
-        await orders_cache.save_order_data("binance", "ORD999", {"final_volume": 0.5})
+        updated_order = create_test_order(
+            status="open",
+            volume=1.0,
+            final_volume=0.5,
+            order_id="ORD999",
+            exchange="binance"
+        )
+        await orders_cache.save_order_data("binance", updated_order)
 
         # Retrieve and verify merge
         order = await orders_cache.get_order_status("binance", "ORD999")
@@ -87,11 +126,13 @@ class TestOrdersCacheLegacyMethods:
     @pytest.mark.asyncio
     async def test_save_order_data_cancelled_expiry(self, orders_cache):
         """Test that cancelled orders get expiry set."""
-        await orders_cache.save_order_data(
-            "binance",
-            "ORD_CANCEL",
-            {"status": "canceled", "symbol": "BTC/USDT"}
+        cancelled_order = create_test_order(
+            status="canceled",
+            symbol="BTC/USDT",
+            order_id="ORD_CANCEL",
+            exchange="binance"
         )
+        await orders_cache.save_order_data("binance", cancelled_order)
 
         # Order should exist
         order = await orders_cache.get_order_status("binance", "ORD_CANCEL")
@@ -103,20 +144,18 @@ class TestOrdersCacheLegacyMethods:
         """Test getting all orders for an exchange."""
         # Save multiple orders
         for i in range(5):
-            await orders_cache.save_order_data(
-                "kraken",
-                f"ORD{i}",
-                {
-                    "symbol": f"TEST{i}/USD",
-                    "volume": 0.1 * (i + 1),
-                    "status": "open",
-                    "side": "buy",
-                    "order_type": "limit",
-                    "bot_id": 100 + i,
-                    "uid": 200,
-                    "ex_id": 300
-                }
+            order = create_test_order(
+                symbol=f"TEST{i}/USD",
+                volume=0.1 * (i + 1),
+                status="open",
+                side="buy",
+                order_type="limit",
+                bot_id=100 + i,
+                uid=200,
+                order_id=f"ORD{i}",
+                exchange="kraken"
             )
+            await orders_cache.save_order_data("kraken", order)
 
         # Get all orders
         orders = await orders_cache.get_orders("kraken")
@@ -185,11 +224,16 @@ class TestOrdersCacheLegacyMethods:
     @pytest.mark.asyncio
     async def test_save_order_data_error_handling(self, orders_cache):
         """Test error handling in save_order_data."""
-        # Test with invalid JSON data that could cause issues
-        invalid_data = {"timestamp": float('inf')}  # Invalid JSON value
+        # Create order with potentially problematic data
+        order = create_test_order(
+            order_id="ORD_ERROR",
+            exchange="binance",
+            # Order model will handle timestamp properly
+            timestamp=datetime.now(UTC)
+        )
         
         # Should handle gracefully and not crash
-        await orders_cache.save_order_data("binance", "ORD_ERROR", invalid_data)
+        await orders_cache.save_order_data("binance", order)
         
         # Verify order can still be retrieved (error handling should be internal)
         order = await orders_cache.get_order_status("binance", "ORD_ERROR")
@@ -212,33 +256,40 @@ class TestOrdersCacheLegacyIntegration:
         await orders_cache.push_open_order(order_id, local_id)
 
         # 2. Save order data
-        await orders_cache.save_order_data(
-            exchange,
-            order_id,
-            {
-                "symbol": "BTC/USDT",
-                "side": "buy",
-                "volume": 0.1,
-                "price": 50000.0,
-                "status": "pending",
-                "order_type": "limit",
-                "bot_id": 123,
-                "uid": 456,
-                "ex_id": 789,
-                "cat_ex_id": 1
-            }
+        order = create_test_order(
+            symbol="BTC/USDT",
+            side="buy",
+            volume=0.1,
+            price=50000.0,
+            status="pending",
+            order_type="limit",
+            bot_id=123,
+            uid=456,
+            order_id=order_id,
+            exchange=exchange,
+            cat_ex_id=1
         )
+        await orders_cache.save_order_data(exchange, order)
 
         # 3. Pop order for processing
         popped_id = await orders_cache.pop_open_order(local_id)
         assert popped_id == order_id
 
         # 4. Update order status
-        await orders_cache.save_order_data(
-            exchange,
-            order_id,
-            {"status": "open", "ex_order_id": "BIN123"}
+        updated_order = create_test_order(
+            symbol="BTC/USDT",
+            side="buy",
+            volume=0.1,
+            price=50000.0,
+            status="open",
+            order_type="limit",
+            bot_id=123,
+            uid=456,
+            order_id=order_id,
+            exchange=exchange,
+            cat_ex_id=1
         )
+        await orders_cache.save_order_data(exchange, updated_order)
 
         # 5. Get order status
         order = await orders_cache.get_order_status(exchange, order_id)
@@ -246,15 +297,21 @@ class TestOrdersCacheLegacyIntegration:
         assert order.ex_order_id == order_id  # Should be set from order_id
 
         # 6. Fill order
-        await orders_cache.save_order_data(
-            exchange,
-            order_id,
-            {
-                "status": "filled",
-                "final_volume": 0.1,
-                "fee": 0.1
-            }
+        filled_order = create_test_order(
+            symbol="BTC/USDT",
+            side="buy",
+            volume=0.1,
+            price=50000.0,
+            status="filled",
+            order_type="limit",
+            bot_id=123,
+            uid=456,
+            final_volume=0.1,
+            order_id=order_id,
+            exchange=exchange,
+            cat_ex_id=1
         )
+        await orders_cache.save_order_data(exchange, filled_order)
 
         # 7. Get all orders
         all_orders = await orders_cache.get_orders(exchange)
@@ -296,22 +353,20 @@ class TestOrdersCacheLegacyIntegration:
             save_success = False
             for attempt in range(3):
                 try:
-                    await orders_cache.save_order_data(
-                        exchange,
-                        order_id,
-                        {
-                            "symbol": "ETH/USD",
-                            "side": "buy" if i % 2 == 0 else "sell",
-                            "volume": 0.1 * (i + 1),
-                            "price": 3000.0 + i * 10,
-                            "status": "pending",
-                            "order_type": "limit",
-                            "bot_id": 100,
-                            "uid": 200,
-                            "ex_id": 300,
-                            "cat_ex_id": 2
-                        }
+                    order = create_test_order(
+                        symbol="ETH/USD",
+                        side="buy" if i % 2 == 0 else "sell",
+                        volume=0.1 * (i + 1),
+                        price=3000.0 + i * 10,
+                        status="pending",
+                        order_type="limit",
+                        bot_id=100,
+                        uid=200,
+                        order_id=order_id,
+                        exchange=exchange,
+                        cat_ex_id=2
                     )
+                    await orders_cache.save_order_data(exchange, order)
                     save_success = True
                     break
                 except Exception:
@@ -350,11 +405,20 @@ class TestOrdersCacheLegacyIntegration:
             # If we successfully popped the order, update it
             if popped_id == order_id:
                 try:
-                    await orders_cache.save_order_data(
-                        exchange,
-                        order_id,
-                        {"status": "open"}
+                    updated_order = create_test_order(
+                        symbol="ETH/USD",
+                        side="buy",
+                        volume=0.1,
+                        price=3000.0,
+                        status="open",
+                        order_type="limit",
+                        bot_id=100,
+                        uid=200,
+                        order_id=order_id,
+                        exchange=exchange,
+                        cat_ex_id=2
                     )
+                    await orders_cache.save_order_data(exchange, updated_order)
                 except Exception:
                     # Don't fail the test if update fails - the pop was successful
                     pass
@@ -398,26 +462,27 @@ class TestOrdersCacheLegacyIntegration:
         order_id = "PERSIST_001"
 
         # Save comprehensive order data
-        full_data = {
-            "symbol": "BTC/USD",
-            "side": "buy",
-            "order_type": "limit",
-            "volume": 0.5,
-            "price": 45000.0,
-            "status": "open",
-            "bot_id": 999,
-            "uid": 111,
-            "ex_id": 222,
-            "cat_ex_id": 3,
-            "command": "GRID_BUY",
-            "reason": "Grid level hit",
-            "futures": True,
-            "leverage": 10.0,
-            "tick": 0.01,
-            "plimit": 44000.0
-        }
-
-        await orders_cache.save_order_data(exchange, order_id, full_data)
+        comprehensive_order = create_test_order(
+            symbol="BTC/USD",
+            side="buy",
+            order_type="limit",
+            volume=0.5,
+            price=45000.0,
+            status="open",
+            bot_id=999,
+            uid=111,
+            order_id=order_id,
+            exchange=exchange,
+            cat_ex_id=3,
+            command="GRID_BUY",
+            reason="Grid level hit",
+            futures=True,
+            leverage=10.0,
+            tick=0.01,
+            plimit=44000.0,
+            ex_id=222  # Set numeric ex_id explicitly as expected by the test
+        )
+        await orders_cache.save_order_data(exchange, comprehensive_order)
 
         # Retrieve and verify all fields
         order = await orders_cache.get_order_status(exchange, order_id)
@@ -444,8 +509,12 @@ class TestOrdersCacheEdgeCases:
 
     @pytest.mark.asyncio
     async def test_empty_order_data(self, orders_cache):
-        """Test handling empty order data."""
-        await orders_cache.save_order_data("test", "EMPTY_001", {})
+        """Test handling minimal order data."""
+        minimal_order = create_test_order(
+            order_id="EMPTY_001",
+            exchange="test"
+        )
+        await orders_cache.save_order_data("test", minimal_order)
 
         order = await orders_cache.get_order_status("test", "EMPTY_001")
         assert order is not None
@@ -455,11 +524,13 @@ class TestOrdersCacheEdgeCases:
     @pytest.mark.asyncio
     async def test_invalid_order_id_format(self, orders_cache):
         """Test handling non-numeric order IDs."""
-        await orders_cache.save_order_data(
-            "test",
-            "NON_NUMERIC_ID",
-            {"symbol": "BTC/USDT", "volume": 1.0}
+        order = create_test_order(
+            symbol="BTC/USDT",
+            volume=1.0,
+            order_id="NON_NUMERIC_ID",
+            exchange="test"
         )
+        await orders_cache.save_order_data("test", order)
 
         order = await orders_cache.get_order_status("test", "NON_NUMERIC_ID")
         assert order is not None

@@ -279,17 +279,15 @@ class TestOrderPerformance:
         cache = orders_cache
         
         try:
-            # Create test order
-            order = create_test_order("BTC/USDT", "buy", 0.1, "PERF_ORDER")
-            order_data = order.to_dict()
-            
             # Benchmark save operations
             save_times = []
             for i in range(50):
                 order_id = f"SAVE_ORD_{i}"
+                # Create test order with unique ID
+                order = create_test_order("BTC/USDT", "buy", 0.1, order_id)
                 
                 start = time.perf_counter()
-                await cache.save_order_data("binance", order_id, order_data)
+                await cache.save_order_data("binance", order)
                 end = time.perf_counter()
                 
                 save_times.append((end - start) * 1000)
@@ -402,7 +400,7 @@ class TestConcurrentPerformance:
                     order = create_test_order("MIX/USDT", "buy", 0.1, f"MIX_ORD_{i}")
                     
                     start = time.perf_counter()
-                    await orders_cache.save_order_data("binance", order.ex_order_id, order.to_dict())
+                    await orders_cache.save_order_data("binance", order)
                     end = time.perf_counter()
                     
                     times.append((end - start) * 1000)

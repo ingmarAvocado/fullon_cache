@@ -1,10 +1,36 @@
 """Additional tests to achieve 100% coverage for OrdersCache."""
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fullon_orm.models import Order
 from redis.exceptions import RedisError
+
+
+def create_test_order(symbol="BTC/USDT", side="buy", volume=0.1, order_id="ORD_001", exchange="binance", **kwargs):
+    """Factory for test Order objects."""
+    return Order(
+        ex_order_id=order_id,
+        ex_id=exchange,
+        symbol=symbol,
+        side=side,
+        order_type=kwargs.get("order_type", "market"),
+        volume=volume,
+        price=kwargs.get("price", 50000.0),
+        uid=kwargs.get("uid", "user_123"),
+        status=kwargs.get("status", "open"),
+        bot_id=kwargs.get("bot_id", 123),
+        cat_ex_id=kwargs.get("cat_ex_id", 1),
+        final_volume=kwargs.get("final_volume"),
+        plimit=kwargs.get("plimit"),
+        tick=kwargs.get("tick"),
+        futures=kwargs.get("futures"),
+        leverage=kwargs.get("leverage"),
+        command=kwargs.get("command"),
+        reason=kwargs.get("reason"),
+        timestamp=kwargs.get("timestamp", datetime.now(UTC))
+    )
 
 
 class TestOrdersCacheCoverage:
@@ -36,13 +62,15 @@ class TestOrdersCacheCoverage:
     @pytest.mark.asyncio
     async def test_save_order_data_with_cancelled_status(self, orders_cache):
         """Test save_order_data sets expiry for cancelled orders."""
-        order_data = {
-            "status": "cancelled",
-            "symbol": "BTC/USDT"
-        }
+        cancelled_order = create_test_order(
+            status="cancelled",
+            symbol="BTC/USDT",
+            order_id="order123",
+            exchange="binance"
+        )
 
         # Should set expiry without error
-        await orders_cache.save_order_data("binance", "order123", order_data)
+        await orders_cache.save_order_data("binance", cancelled_order)
 
     @pytest.mark.asyncio
     async def test_get_order_status_attribute_error(self, orders_cache):

@@ -71,7 +71,7 @@ class TestModelValidationErrors:
             order = create_test_order("", "buy", 0.1, "INVALID_ORD")
             
             # Should handle gracefully
-            await orders_cache.save_order_data("binance", order.ex_order_id, order.to_dict())
+            await orders_cache.save_order_data("binance", order)
             
             # 3. Retrieve ticker that was never created (due to validation error)
             retrieved_tick = await tick_cache.get_ticker("", "binance")
@@ -164,7 +164,7 @@ class TestConcurrencyErrorHandling:
                         else:
                             order = create_test_order(f"CONC_{i}/USDT", "buy", 0.1, f"ORD_{i}")
                         
-                        await orders_cache.save_order_data("binance", order.ex_order_id, order.to_dict())
+                        await orders_cache.save_order_data("binance", order)
                         results.append(("success", order.ex_order_id))
                         await asyncio.sleep(0.001)
                     except Exception as e:
@@ -251,20 +251,20 @@ class TestResourceExhaustionHandling:
                     
                     # Create order with worker-specific ID
                     order_id = f"MEM_ORD_{worker_id}_{i}"
-                    order = create_test_order(symbol, "buy", 0.1, order_id)
-                    order_data = {
-                        "symbol": symbol,
-                        "side": "buy",
-                        "volume": 0.1,
-                        "price": 1000.0 + i,
-                        "status": "open"
-                    }
+                    order = create_test_order(
+                        symbol=symbol,
+                        side="buy",
+                        volume=0.1,
+                        order_id=order_id
+                    )
+                    # Update price for variation
+                    order.price = 1000.0 + i
                     
                     # Try to save order data with retry logic
                     save_success = False
                     for attempt in range(2):
                         try:
-                            await orders_cache.save_order_data(exchange, order_id, order_data)
+                            await orders_cache.save_order_data(exchange, order)
                             save_success = True
                             break
                         except Exception:
@@ -461,7 +461,7 @@ class TestResourceExhaustionHandling:
                 await tick_cache.update_ticker("binance", tick)
                 
                 order = create_test_order(f"CONN_{cache_pair_idx}/USDT", "buy", 0.1, f"CONN_ORD_{cache_pair_idx}")
-                await orders_cache.save_order_data("binance", order.ex_order_id, order.to_dict())
+                await orders_cache.save_order_data("binance", order)
                 
                 return cache_pair_idx
             
@@ -518,7 +518,7 @@ class TestErrorRecoveryPatterns:
             await tick_cache.update_ticker("binance", tick)
             
             order = create_test_order(symbol, "buy", 0.1, order_id)
-            await orders_cache.save_order_data("binance", order.ex_order_id, order.to_dict())
+            await orders_cache.save_order_data("binance", order)
             
             # 2. Simulate partial system failure (trades cache has issues)
             # We'll simulate this by creating invalid trade data
@@ -542,11 +542,15 @@ class TestErrorRecoveryPatterns:
             assert result is True
             
             # Order operations should work
-            await orders_cache.save_order_data(
-                "binance",
-                order_id,
-                {"status": "filled", "final_volume": 0.1}
+            filled_order = create_test_order(
+                symbol=symbol,
+                side="buy",
+                volume=0.1,
+                order_id=order_id,
+                status="filled",
+                final_volume=0.1
             )
+            await orders_cache.save_order_data("binance", filled_order)
             
             # 4. Verify graceful degradation
             # Core functionality should be maintained
@@ -634,7 +638,7 @@ class TestErrorRecoveryPatterns:
                 for attempt in range(3):
                     try:
                         order = create_test_order(symbol, "buy", 0.1, f"{bot}_ORD")
-                        await orders_cache.save_order_data("binance", order.ex_order_id, order.to_dict())
+                        await orders_cache.save_order_data("binance", order)
                         break
                     except Exception:
                         if attempt == 2:
@@ -644,7 +648,7 @@ class TestErrorRecoveryPatterns:
             # 3. Introduce error in one operation but don't expect it to affect others
             invalid_order = create_test_order("", "invalid_side", -1.0, f"INVALID_ORD_{worker_id}")
             try:
-                await orders_cache.save_order_data("binance", f"INVALID_ORD_{worker_id}", invalid_order.to_dict())
+                await orders_cache.save_order_data("binance", invalid_order)
             except Exception:
                 pass  # Expected potential failure
             
