@@ -13,17 +13,20 @@ class TestTradesCacheQueues:
     @pytest.mark.asyncio
     async def test_push_trade_list(self, trades_cache):
         """Test push_trade_list method."""
-        trade_data = {
-            "id": "12345",
-            "price": 50000.0,
-            "amount": 0.1,
-            "side": "buy",
-            "timestamp": datetime.now(UTC).isoformat()
-        }
+        trade = Trade(
+            trade_id="12345",
+            ex_trade_id="EX_12345",
+            symbol="BTC/USDT",
+            side="buy",
+            volume=0.1,
+            price=50000.0,
+            cost=5000.0,
+            fee=5.0
+        )
 
         # Push trade to list
         length = await trades_cache.push_trade_list(
-            "BTC/USDT", "binance", trade_data
+            "BTC/USDT", "binance", trade
         )
         assert length > 0
 

@@ -69,14 +69,14 @@ class TradesCache(BaseCache):
         self,
         symbol: str,
         exchange: str,
-        trade: dict | Trade = {}
+        trade: Trade
     ) -> int:
         """Push trade data to a Redis list.
         
         Args:
             symbol: The trading symbol for the asset pair
             exchange: The name of the exchange where the trade occurred
-            trade: The trade data as a dictionary or Trade object
+            trade: The fullon_orm.Trade object
             
         Returns:
             The new length of the list after the push operation
@@ -86,11 +86,8 @@ class TradesCache(BaseCache):
         redis_key = f"trades:{exchange}:{normalized_symbol}"
 
         try:
-            # Convert Trade object to dict if needed
-            if isinstance(trade, Trade):
-                trade_data = trade.to_dict()
-            else:
-                trade_data = trade
+            # Convert Trade object to dict for Redis storage
+            trade_data = trade.to_dict()
 
             # Push to list
             async with self._redis_context() as redis_client:
@@ -261,24 +258,21 @@ class TradesCache(BaseCache):
         self,
         uid: str,
         exchange: str,
-        trade: dict | Trade = {}
+        trade: Trade
     ) -> int:
         """Push user trade to Redis list.
         
         Args:
             uid: User ID
             exchange: Exchange name
-            trade: Trade data dictionary or Trade object
+            trade: The fullon_orm.Trade object
             
         Returns:
             New length of the list
         """
         try:
-            # Convert Trade object to dict if needed
-            if isinstance(trade, Trade):
-                trade_data = trade.to_dict()
-            else:
-                trade_data = trade
+            # Convert Trade object to dict for Redis storage
+            trade_data = trade.to_dict()
 
             redis_key = f"user_trades:{uid}:{exchange}"
             async with self._redis_context() as redis_client:
@@ -292,7 +286,7 @@ class TradesCache(BaseCache):
         uid: str,
         exchange: str,
         timeout: int = 0
-    ) -> dict[str, Any] | None:
+    ) -> Trade | None:
         """Pop trade from user's trade queue.
         
         Args:
@@ -301,7 +295,7 @@ class TradesCache(BaseCache):
             timeout: Blocking timeout in seconds
             
         Returns:
-            Trade dictionary or None
+            fullon_orm.Trade object or None
         """
         try:
             redis_key = f"user_trades:{uid}:{exchange}"
@@ -312,12 +306,14 @@ class TradesCache(BaseCache):
                     result = await redis_client.blpop(redis_key, timeout=timeout)
                     if result:
                         _, trade_json = result
-                        return json.loads(trade_json)
+                        trade_dict = json.loads(trade_json)
+                        return Trade.from_dict(trade_dict)
                 else:
                     # Non-blocking pop
                     trade_json = await redis_client.lpop(redis_key)
                     if trade_json:
-                        return json.loads(trade_json)
+                        trade_dict = json.loads(trade_json)
+                        return Trade.from_dict(trade_dict)
 
             return None
         except Exception as e:
@@ -329,7 +325,7 @@ class TradesCache(BaseCache):
         self,
         symbol: str,
         exchange: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[Trade]:
         """Get all trades and clear the list.
         
         Args:
@@ -337,7 +333,7 @@ class TradesCache(BaseCache):
             exchange: Exchange name
             
         Returns:
-            List of trade dictionaries
+            List of fullon_orm.Trade objects
             
         Note:
             This method gets all trades and then deletes the list.
@@ -355,12 +351,13 @@ class TradesCache(BaseCache):
                 # Delete the list
                 await redis_client.delete(redis_key)
 
-            # Parse trades
+            # Parse trades into Trade models
             trades = []
             for trade_json in trades_json:
                 try:
                     trade_dict = json.loads(trade_json)
-                    trades.append(trade_dict)
+                    trade = Trade.from_dict(trade_dict)
+                    trades.append(trade)
                 except json.JSONDecodeError:
                     logger.warning(f"Failed to parse trade JSON: {trade_json}")
                 except Exception as e:
