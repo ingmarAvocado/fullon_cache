@@ -79,38 +79,38 @@ class TickCache(BaseCache):
         """Generate pub/sub channel name."""
         return f"ticker_updates:{exchange}:{symbol_name}"
 
-    async def set_ticker(self, symbol: Symbol, tick: Tick) -> bool:
-        """Set ticker data for a symbol.
+    async def set_ticker(self, tick: Tick) -> bool:
+        """Set ticker data using a Tick object.
         
         Args:
-            symbol: fullon_orm Symbol object
-            tick: fullon_orm Tick object
+            tick: fullon_orm Tick object containing symbol and exchange info
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            exchange = self._get_exchange_name(symbol)
-            channel = self._get_pubsub_channel(exchange, symbol.symbol)
+            exchange = tick.exchange
+            symbol_name = tick.symbol
+            channel = self._get_pubsub_channel(exchange, symbol_name)
             
             # Prepare tick data
             tick_data = tick.to_dict()
             tick_json = json.dumps(tick_data)
             
             # Store ticker data (use hash structure)
-            await self.hset(f"tickers:{exchange}", symbol.symbol, tick_json)
+            await self.hset(f"tickers:{exchange}", symbol_name, tick_json)
             
             # Store timestamp for ordering (simple key-value)
-            await self.set(f"ticker_time:{exchange}:{symbol.symbol}", str(tick.time))
+            await self.set(f"ticker_time:{exchange}:{symbol_name}", str(tick.time))
             
             # Publish update
             await self.publish(channel, tick_json)
             
-            logger.debug("Ticker set", exchange=exchange, symbol=symbol.symbol, price=tick.price)
+            logger.debug("Ticker set", exchange=exchange, symbol=symbol_name, price=tick.price)
             return True
             
         except Exception as e:
-            logger.error("Failed to set ticker", error=str(e), symbol=symbol.symbol)
+            logger.error("Failed to set ticker", error=str(e), symbol=tick.symbol if hasattr(tick, 'symbol') else 'unknown')
             return False
 
     async def get_ticker(self, symbol_or_str, exchange: str = None) -> Tick | None:
