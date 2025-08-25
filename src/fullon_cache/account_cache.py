@@ -284,16 +284,16 @@ class AccountCache(BaseCache):
         """
         try:
             if not ex_id:
-                return Position(symbol=symbol)
+                return Position(symbol=symbol, ex_id="")
 
             async with self._redis_context() as redis:
                 datas = await redis.hget("account_positions", str(ex_id))
                 if not datas:
-                    return Position(symbol=symbol)
+                    return Position(symbol=symbol, ex_id=str(ex_id))
 
                 positions_data = json.loads(datas)
                 if symbol not in positions_data:
-                    return Position(symbol=symbol)
+                    return Position(symbol=symbol, ex_id=str(ex_id))
 
                 data = positions_data[symbol]
                 # Map to fullon_orm Position
@@ -312,7 +312,7 @@ class AccountCache(BaseCache):
 
         except (KeyError, TypeError, json.JSONDecodeError, ConnectionError) as error:
             logger.debug(f"Error getting position: {error}")
-            return Position(symbol=symbol)
+            return Position(symbol=symbol, ex_id=str(ex_id) if ex_id else "")
 
     async def get_full_account(self, exchange: int, currency: str) -> dict:
         """Returns account data for specific currency.

@@ -44,10 +44,10 @@ def create_test_tick(symbol="BTC/USDT", exchange="binance", price=50000.0):
     )
 
 
-def create_test_order(symbol="BTC/USDT", ex_id="binance", side="buy", volume=0.1):
+def create_test_order(symbol="BTC/USDT", ex_id="binance", side="buy", volume=0.1, order_id="ORD_67890"):
     """Factory for test Order objects."""
     return Order(
-        ex_order_id="ORD_67890",
+        ex_order_id=order_id,
         ex_id=ex_id,
         symbol=symbol,
         side=side,
@@ -61,20 +61,20 @@ def create_test_order(symbol="BTC/USDT", ex_id="binance", side="buy", volume=0.1
 
 
 def create_test_trade(symbol="BTC/USDT", ex_id="binance", volume=0.1):
-    """Factory for test Trade data (as dict)."""
-    return {
-        "trade_id": "TRD_12345",
-        "ex_order_id": "ORD_67890", 
-        "ex_id": ex_id,
-        "symbol": symbol,
-        "side": "buy",
-        "order_type": "market",
-        "volume": volume,
-        "price": 50000.0,
-        "cost": 5000.0,
-        "fee": 5.0,
-        "uid": "user_123"
-    }
+    """Factory for test Trade objects."""
+    import time
+    return Trade(
+        trade_id=12345,
+        ex_trade_id="EX_TRD_12345",
+        ex_order_id="ORD_67890", 
+        uid=1,
+        ex_id=1,
+        symbol=symbol,
+        side="buy",
+        volume=volume,
+        price=50000.0,
+        time=time.time()
+    )
 
 
 def create_test_position(symbol="BTC/USDT", ex_id="1", volume=0.1):
@@ -140,7 +140,7 @@ class TestEndToEndTradingFlow:
             # Trade should be recorded
             trades = await trades_cache.get_trades_list("BTC/USDT", "binance")
             assert len(trades) == 1
-            assert trades[0]["volume"] == 0.1
+            assert trades[0].volume == 0.1
             
             # Position should be updated
             positions = await account_cache.get_all_positions()
@@ -167,7 +167,7 @@ class TestEndToEndTradingFlow:
                 """Simulate real-time ticker updates."""
                 for i in range(10):
                     tick = create_test_tick("BTC/USDT", "binance", 50000.0 + i)
-                    await tick_cache.update_ticker("binance", tick)
+                    await tick_cache.set_ticker(tick)
                     await asyncio.sleep(0.01)  # Small delay to simulate real-time
             
             async def process_orders():
@@ -196,8 +196,9 @@ class TestEndToEndTradingFlow:
             
             # Verify all operations completed successfully
             # Check final ticker price
-            final_price = await tick_cache.get_price("BTC/USDT", "binance")
-            assert final_price == 50009.0  # Last price from update_tickers
+            final_ticker = await tick_cache.get_ticker("BTC/USDT", "binance")
+            assert final_ticker is not None
+            assert final_ticker.price == 50009.0  # Last price from update_tickers
             
             # Check orders were created
             all_orders = await orders_cache.get_orders("binance")
@@ -239,14 +240,11 @@ class TestTradingFlowErrorHandling:
             order = await orders_cache.get_order_status("binance", "INVALID_ORDER")
             assert order is not None
             
-            # Test invalid trade data
-            invalid_trade_data = {
-                "symbol": None,  # Invalid None symbol
-                "volume": "not_a_number",  # Invalid volume type
-            }
+            # Test invalid trade data - this should still work as the cache doesn't validate
+            invalid_trade = create_test_trade("", "binance", -1.0)  # Empty symbol, negative volume
             
-            # Should handle gracefully
-            length = await trades_cache.push_trade_list("BTC/USDT", "binance", invalid_trade_data)
+            # Should handle gracefully (cache doesn't validate, just stores)
+            length = await trades_cache.push_trade_list("BTC/USDT", "binance", invalid_trade)
             assert length > 0
             
         finally:

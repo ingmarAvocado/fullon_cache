@@ -1,6 +1,7 @@
 """Tests for simplified TradesCache with queue operations only."""
 
 import asyncio
+import json
 from datetime import UTC, datetime
 
 import pytest
@@ -115,24 +116,26 @@ class TestTradesCacheQueues:
     @pytest.mark.asyncio
     async def test_push_my_trades_list(self, trades_cache):
         """Test pushing user trades to list."""
-        trade_data = {
-            "id": "user_trade_123",
-            "symbol": "ETH/USDT",
-            "price": 3000.0,
-            "amount": 1.0,
-            "side": "sell",
-            "timestamp": datetime.now(UTC).isoformat()
-        }
+        trade = Trade(
+            trade_id="user_trade_123",
+            ex_trade_id="EX_user_trade_123",
+            symbol="ETH/USDT",
+            price=3000.0,
+            volume=1.0,
+            side="sell",
+            cost=3000.0,
+            fee=3.0
+        )
 
         # Push user trade
         length = await trades_cache.push_my_trades_list(
-            "user_789", "binance", trade_data
+            "user_789", "binance", trade
         )
         assert length == 1
 
         # Push another
         length = await trades_cache.push_my_trades_list(
-            "user_789", "binance", trade_data
+            "user_789", "binance", trade
         )
         assert length == 2
 
@@ -141,7 +144,16 @@ class TestTradesCacheQueues:
         """Test popping user trades."""
         # Push some trades
         trades = [
-            {"id": f"trade_{i}", "price": 100.0 * i}
+            Trade(
+                trade_id=f"trade_{i}",
+                ex_trade_id=f"EX_trade_{i}", 
+                symbol="BTC/USDT",
+                price=100.0 * i,
+                volume=1.0,
+                side="buy",
+                cost=100.0 * i,
+                fee=1.0
+            )
             for i in range(3)
         ]
 
@@ -153,12 +165,12 @@ class TestTradesCacheQueues:
         # Pop trades (FIFO)
         popped = await trades_cache.pop_my_trade("user_999", "kraken")
         assert popped is not None
-        assert popped["id"] == "trade_0"
+        assert popped.trade_id == "trade_0"
 
         # Pop with timeout (non-blocking)
         popped = await trades_cache.pop_my_trade("user_999", "kraken", timeout=0)
         assert popped is not None
-        assert popped["id"] == "trade_1"
+        assert popped.trade_id == "trade_1"
 
         # Try to pop from empty queue
         await trades_cache.pop_my_trade("user_999", "kraken")  # Pop last one
@@ -428,12 +440,15 @@ class TestTradesCacheIntegration:
         timestamp = datetime.now(UTC).timestamp()
         
         # 1. Use list method to push trade with retry
-        list_trade = {
-            "id": f"LIST_{worker_id}_{timestamp}",
-            "price": 3100.0,
-            "amount": 0.5,
-            "side": "sell"
-        }
+        from fullon_orm.models import Trade
+        list_trade = Trade(
+            trade_id=f"LIST_{worker_id}_{timestamp}",
+            price=3100.0,
+            volume=0.5,
+            side="sell",
+            symbol=list_symbol,
+            time=datetime.now(UTC)
+        )
         
         list_success = False
         for attempt in range(3):
@@ -448,12 +463,14 @@ class TestTradesCacheIntegration:
                 await asyncio.sleep(0.1)
 
         # 2. Push user trade with retry
-        user_trade = {
-            "id": f"USER_{worker_id}_{timestamp}",
-            "price": 3200.0,
-            "amount": 1.0,
-            "side": "buy"
-        }
+        user_trade = Trade(
+            trade_id=f"USER_{worker_id}_{timestamp}",
+            price=3200.0,
+            volume=1.0,
+            side="buy",
+            symbol=list_symbol,
+            time=datetime.now(UTC)
+        )
         
         user_success = False
         for attempt in range(3):
@@ -499,9 +516,18 @@ class TestTradesCacheIntegration:
     @pytest.mark.asyncio
     async def test_error_handling(self, trades_cache):
         """Test error handling in various scenarios."""
-        # Test with empty trade data
-        result = await trades_cache.push_trade_list("BTC/USDT", "binance", {})
-        assert result > 0  # Should still work with empty dict
+        # Test with minimal trade data
+        from fullon_orm.models import Trade
+        minimal_trade = Trade(
+            trade_id="TEST_001",
+            price=50000.0,
+            volume=0.1,
+            side="buy",
+            symbol="BTC/USDT",
+            time=datetime.now(UTC)
+        )
+        result = await trades_cache.push_trade_list("BTC/USDT", "binance", minimal_trade)
+        assert result > 0  # Should work with minimal trade data
 
         # Test with None timeout (should use 0)
         result = await trades_cache.pop_my_trade("user_test", "binance", timeout=None)
@@ -591,17 +617,30 @@ class TestTradesCacheIntegration:
         normalized_symbol = symbol.replace("/", "")
         redis_key = f"trades:{exchange}:{normalized_symbol}"
 
-        # Insert invalid JSON
+        # Insert invalid JSON and a valid Trade JSON
+        from fullon_orm.models import Trade
+        valid_trade = Trade(
+            trade_id="VALID_001",
+            price=50000.0,
+            volume=0.1,
+            side="buy", 
+            symbol=symbol,
+            time=datetime.now(UTC)
+        )
+        valid_trade_json = json.dumps(valid_trade.to_dict())
+        
         async with trades_cache._cache._redis_context() as redis_client:
             await redis_client.rpush(redis_key, "invalid_json_data")
             await redis_client.rpush(redis_key, "{invalid_json}")
-            await redis_client.rpush(redis_key, '{"valid": "json"}')
+            await redis_client.rpush(redis_key, valid_trade_json)
 
         # This should handle the invalid JSON gracefully
         trades = await trades_cache.get_trades_list(symbol, exchange)
-        # Should only get the valid JSON item
+        # Should only get the valid JSON item - the invalid JSON is filtered out
         assert len(trades) == 1
-        assert trades[0]["valid"] == "json"
+        # The valid trade should be a Trade object, not a dict
+        from fullon_orm.models import Trade
+        assert isinstance(trades[0], Trade)
 
     @pytest.mark.asyncio
     async def test_blocking_timeout_with_actual_timeout(self, trades_cache):

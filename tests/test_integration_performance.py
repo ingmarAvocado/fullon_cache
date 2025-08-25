@@ -58,7 +58,7 @@ class TestTickerPerformance:
         try:
             # Warm up
             tick = create_test_tick("BTC/USDT", "binance", 50000.0)
-            await cache.update_ticker("binance", tick)
+            await cache.set_ticker(tick)
             
             # Benchmark single updates
             times = []
@@ -66,7 +66,7 @@ class TestTickerPerformance:
                 tick = create_test_tick("BTC/USDT", "binance", 50000.0 + i)
                 
                 start = time.perf_counter()
-                await cache.update_ticker("binance", tick)
+                await cache.set_ticker(tick)
                 end = time.perf_counter()
                 
                 times.append((end - start) * 1000)  # Convert to milliseconds
@@ -97,7 +97,7 @@ class TestTickerPerformance:
         try:
             # Setup: Add ticker data
             tick = create_test_tick("BTC/USDT", "binance", 50000.0)
-            await cache.update_ticker("binance", tick)
+            await cache.set_ticker(tick)
             
             # Benchmark retrievals
             times = []
@@ -142,7 +142,7 @@ class TestTickerPerformance:
                 tick = create_test_tick(symbol, f"binance_{worker_id}", 1000.0)
                 for attempt in range(3):
                     try:
-                        result = await cache.update_ticker(f"binance_{worker_id}", tick)
+                        result = await cache.set_ticker(tick)
                         if result:
                             successful_updates += 1
                         break
@@ -337,7 +337,7 @@ class TestConcurrentPerformance:
                     tick = create_test_tick(symbol, "binance", 1000.0 + i)
                     
                     start = time.perf_counter()
-                    await cache.update_ticker("binance", tick)
+                    await cache.set_ticker(tick)
                     end = time.perf_counter()
                     
                     times.append((end - start) * 1000)
@@ -386,7 +386,7 @@ class TestConcurrentPerformance:
                     tick = create_test_tick("MIX/USDT", "binance", 1000.0 + i)
                     
                     start = time.perf_counter()
-                    await tick_cache.update_ticker("binance", tick)
+                    await tick_cache.set_ticker(tick)
                     end = time.perf_counter()
                     
                     times.append((end - start) * 1000)
@@ -522,7 +522,7 @@ class TestMemoryPerformance:
         start = time.perf_counter()
         for symbol in symbols:
             tick = create_test_tick(symbol, "binance", 1000.0)
-            await cache.update_ticker("binance", tick)
+            await cache.set_ticker(tick)
         end = time.perf_counter()
         
         bulk_store_time = (end - start) * 1000

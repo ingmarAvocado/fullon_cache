@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fullon_orm.models import Trade
 from redis.exceptions import RedisError
 
 
@@ -61,26 +62,59 @@ class TestTradesCacheCoverage:
 
     @pytest.mark.asyncio
     async def test_push_my_trades_list_with_dict(self, trades_cache):
-        """Test push_my_trades_list with dictionary trade data."""
-        trade_dict = {
-            "trade_id": "TRD123",
-            "price": 50000.0,
-            "volume": 0.1
-        }
+        """Test push_my_trades_list with Trade object."""
+        import time
+        trade = Trade(
+            trade_id="TRD123",
+            ex_trade_id="EX_TRD123",
+            ex_order_id="EX_ORD123",
+            uid=1,
+            ex_id=1,
+            symbol="BTC/USDT",
+            order_type="market",
+            side="buy",
+            volume=0.1,
+            price=50000.0,
+            cost=5000.0,
+            fee=5.0,
+            cur_volume=0.1,
+            cur_avg_price=50000.0,
+            cur_avg_cost=5000.0,
+            cur_fee=5.0,
+            roi=0.0,
+            roi_pct=0.0,
+            total_fee=5.0,
+            leverage=1.0,
+            time=time.time()
+        )
 
-        result = await trades_cache.push_my_trades_list("user123", "binance", trade_dict)
+        result = await trades_cache.push_my_trades_list("user123", "binance", trade)
         assert result > 0
 
     @pytest.mark.asyncio
     async def test_pop_my_trade_blocking_with_result(self, trades_cache):
         """Test pop_my_trade with blocking and immediate result."""
-        # Push a trade first
-        await trades_cache.push_my_trades_list("user123", "binance", {"trade": "data"})
+        import time
+        # Push a Trade object first
+        from fullon_orm.models import Trade
+        trade = Trade(
+            trade_id=123,
+            ex_trade_id="EX_TRD_123",
+            ex_order_id="EX_ORD_123",
+            uid=1,
+            ex_id=1,
+            symbol="BTC/USDT",
+            side="buy",
+            volume=0.1,
+            price=50000.0,
+            time=time.time()
+        )
+        await trades_cache.push_my_trades_list("user123", "binance", trade)
 
         # Pop with timeout should return immediately
         result = await trades_cache.pop_my_trade("user123", "binance", timeout=5)
         assert result is not None
-        assert result["trade"] == "data"
+        assert result.trade_id == 123
 
     @pytest.mark.asyncio
     async def test_pop_my_trade_timeout_error_handling(self, trades_cache):

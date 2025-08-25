@@ -54,7 +54,7 @@ class TestTickCacheORM:
             update_success = False
             for attempt in range(3):
                 try:
-                    result = await cache.update_ticker(exchange, tick)
+                    result = await cache.set_ticker(tick)
                     if result:
                         update_success = True
                         break
@@ -97,9 +97,12 @@ class TestTickCacheORM:
         try:
             # Create and store a tick
             tick = create_test_tick("BTC/USDT", "binance", 50000.0)
-            await cache.update_ticker("binance", tick)
+            await cache.set_ticker(tick)
 
-            # Get the tick back
+            # Get the tick back - use Symbol object instead of strings
+            from fullon_orm.models import Symbol
+            symbol = Symbol(symbol="BTC/USDT", symbol_id=1, cat_ex_id=1)
+            # For this test, we can also test the legacy string interface
             result = await cache.get_ticker("BTC/USDT", "binance")
 
             # Verify it's a proper Tick model
@@ -129,17 +132,17 @@ class TestTickCacheORM:
             await cache.close()
 
     @pytest.mark.asyncio
-    async def test_get_price_tick_with_exchange(self, clean_redis):
-        """Test get_price_tick with specific exchange."""
+    async def test_get_ticker_with_exchange(self, clean_redis):
+        """Test get_ticker with specific exchange."""
         cache = TickCache()
         
         try:
             # Create and store a tick
             tick = create_test_tick("BTC/USDT", "binance", 50000.0)
-            await cache.update_ticker("binance", tick)
+            await cache.set_ticker(tick)
 
-            # Get price tick
-            result = await cache.get_price_tick("BTC/USDT", "binance")
+            # Get ticker
+            result = await cache.get_ticker("BTC/USDT", "binance")
 
             assert result is not None
             assert isinstance(result, Tick)
@@ -152,12 +155,12 @@ class TestTickCacheORM:
             await cache.close()
 
     @pytest.mark.asyncio
-    async def test_get_price_tick_not_found(self, clean_redis):
-        """Test get_price_tick when ticker not found."""
+    async def test_get_ticker_not_found(self, clean_redis):
+        """Test get_ticker when ticker not found."""
         cache = TickCache()
         
         try:
-            result = await cache.get_price_tick("NONEXISTENT/USDT", "binance")
+            result = await cache.get_ticker("NONEXISTENT/USDT", "binance")
             assert result is None
             
         finally:
@@ -218,7 +221,7 @@ class TestTickCacheORM:
             update_success = False
             for attempt in range(3):
                 try:
-                    update_result = await cache.update_ticker(exchange, tick)
+                    update_result = await cache.set_ticker(tick)
                     if update_result is True:
                         update_success = True
                         break
@@ -252,7 +255,7 @@ class TestTickCacheORM:
             price_tick = None
             for attempt in range(3):
                 try:
-                    price_tick = await cache.get_price_tick(symbol, exchange)
+                    price_tick = await cache.get_ticker(symbol, exchange)
                     if price_tick is not None:
                         break
                 except Exception:
@@ -279,7 +282,7 @@ class TestTickCacheORM:
             # Update ticker with retry
             for attempt in range(3):
                 try:
-                    await cache.update_ticker(exchange, tick)
+                    await cache.set_ticker(tick)
                     break
                 except Exception:
                     if attempt == 2:
@@ -319,8 +322,8 @@ class TestTickCacheORM:
             # Store both with retry logic
             for attempt in range(3):
                 try:
-                    await cache.update_ticker(binance_exchange, binance_tick)
-                    await cache.update_ticker(kraken_exchange, kraken_tick)
+                    await cache.set_ticker(binance_tick)
+                    await cache.set_ticker(kraken_tick)
                     break
                 except Exception:
                     if attempt == 2:
@@ -367,7 +370,7 @@ class TestTickCacheORM:
             tick1 = create_test_tick(symbol, exchange, 50000.0)
             for attempt in range(3):
                 try:
-                    await cache.update_ticker(exchange, tick1)
+                    await cache.set_ticker(tick1)
                     break
                 except Exception:
                     if attempt == 2:
@@ -393,7 +396,7 @@ class TestTickCacheORM:
             tick2 = create_test_tick(symbol, exchange, 51000.0)
             for attempt in range(3):
                 try:
-                    await cache.update_ticker(exchange, tick2)
+                    await cache.set_ticker(tick2)
                     break
                 except Exception:
                     if attempt == 2:
@@ -430,7 +433,7 @@ class TestTickCacheORM:
             tick = create_test_tick("BTC/USDT", "binance", 50000.0)
             tick.time = 1672531200.0  # 2023-01-01T00:00:00Z
             
-            await cache.update_ticker("binance", tick)
+            await cache.set_ticker(tick)
             
             # Retrieve and verify timestamp
             retrieved_tick = await cache.get_ticker("BTC/USDT", "binance")
@@ -456,7 +459,7 @@ class TestTickCacheORM:
             # Store tickers for all symbols
             for symbol, description in symbols:
                 tick = create_test_tick(symbol, "binance", 1000.0)
-                await cache.update_ticker("binance", tick)
+                await cache.set_ticker(tick)
             
             # Retrieve and verify all
             for symbol, description in symbols:
@@ -479,7 +482,7 @@ class TestTickCacheORM:
             tick.bid = 49995.0
             tick.ask = 50005.0
             
-            await cache.update_ticker("binance", tick)
+            await cache.set_ticker(tick)
             
             # Retrieve and verify spread
             retrieved_tick = await cache.get_ticker("BTC/USDT", "binance")

@@ -5,6 +5,7 @@ they work seamlessly together with fullon_orm models.
 """
 
 import json
+import time
 from datetime import UTC, datetime
 
 import pytest
@@ -77,7 +78,7 @@ class TestTickOrderIntegration:
         try:
             # 1. Set initial price
             tick = create_test_tick("BTC/USDT", "binance", 50000.0)
-            await tick_cache.update_ticker("binance", tick)
+            await tick_cache.set_ticker(tick)
             
             # 2. Create order at current price
             order = create_test_order(
@@ -95,11 +96,12 @@ class TestTickOrderIntegration:
             
             # 3. Update price (simulate market movement)
             new_tick = create_test_tick("BTC/USDT", "binance", 50500.0)
-            await tick_cache.update_ticker("binance", new_tick)
+            await tick_cache.set_ticker(new_tick)
             
             # 4. Verify price updated
-            current_price = await tick_cache.get_price("BTC/USDT", "binance")
-            assert current_price == 50500.0
+            tick_result = await tick_cache.get_ticker("BTC/USDT", "binance")
+            assert tick_result is not None
+            assert tick_result.price == 50500.0
             
             # 5. Check if order should be filled (price moved favorably)
             order = await orders_cache.get_order_status("binance", "ORD_001")
@@ -144,7 +146,7 @@ class TestTickOrderIntegration:
             # 1. Update prices for all symbols
             for symbol, price in symbols_data:
                 tick = create_test_tick(symbol, "binance", price)
-                await tick_cache.update_ticker("binance", tick)
+                await tick_cache.set_ticker(tick)
             
             # 2. Create orders for all symbols
             for i, (symbol, price) in enumerate(symbols_data):
@@ -161,8 +163,9 @@ class TestTickOrderIntegration:
             
             # 3. Verify all prices are current
             for symbol, expected_price in symbols_data:
-                current_price = await tick_cache.get_price(symbol, "binance")
-                assert current_price == expected_price
+                tick_result = await tick_cache.get_ticker(symbol, "binance")
+                assert tick_result is not None
+                assert tick_result.price == expected_price
             
             # 4. Verify all orders exist
             all_orders = await orders_cache.get_orders("binance")
@@ -230,19 +233,31 @@ class TestOrderTradeAccountIntegration:
             await orders_cache.save_order_data("binance", filled_buy_order)
             
             # 4. Record trade from the fill
-            trade_data = {
-                "trade_id": "TRD_001",
-                "ex_order_id": "ORD_BUY",
-                "symbol": "BTC/USDT",
-                "side": "buy",
-                "volume": 0.1,
-                "price": 50000.0,
-                "cost": 5000.0,
-                "fee": 5.0,
-                "uid": "123"
-            }
+            trade = Trade(
+                trade_id=12345,
+                ex_trade_id="EX_TRD_001",
+                ex_order_id="EX_ORD_001",
+                uid=1,
+                ex_id=1,
+                symbol="BTC/USDT",
+                order_type="limit",
+                side="buy",
+                volume=0.1,
+                price=50000.0,
+                cost=5000.0,
+                fee=5.0,
+                cur_volume=0.1,
+                cur_avg_price=50000.0,
+                cur_avg_cost=5000.0,
+                cur_fee=5.0,
+                roi=0.0,
+                roi_pct=0.0,
+                total_fee=5.0,
+                leverage=1.0,
+                time=time.time()
+            )
             
-            await trades_cache.push_trade_list("BTC/USDT", "binance", trade_data)
+            await trades_cache.push_trade_list("BTC/USDT", "binance", trade)
             
             # 5. Update position based on trade
             updated_position = Position(
@@ -265,8 +280,8 @@ class TestOrderTradeAccountIntegration:
             # Trade should be recorded
             trades = await trades_cache.get_trades_list("BTC/USDT", "binance")
             assert len(trades) == 1
-            assert trades[0]["side"] == "buy"
-            assert trades[0]["volume"] == 0.1
+            assert trades[0].side == "buy"
+            assert trades[0].volume == 0.1
             
             # Position should be updated
             positions = await account_cache.get_positions(1)
@@ -326,20 +341,32 @@ class TestOrderTradeAccountIntegration:
                 await orders_cache.save_order_data("kraken", order)
                 
                 # Record trade
-                trade_data = {
-                    "trade_id": f"TRD_{i}",
-                    "ex_order_id": f"ORD_{i}",
-                    "symbol": "ETH/USDT",
-                    "side": "buy",
-                    "volume": volume,
-                    "price": price,
-                    "cost": cost,
-                    "fee": 1.0,
-                    "uid": "456"
-                }
+                trade = Trade(
+                    trade_id=12345 + i,
+                    ex_trade_id=f"EX_TRD_{i}",
+                    ex_order_id=f"EX_ORD_{i}",
+                    uid=1,
+                    ex_id=2,
+                    symbol="ETH/USDT",
+                    order_type="limit",
+                    side="buy",
+                    volume=volume,
+                    price=price,
+                    cost=cost,
+                    fee=1.0,
+                    cur_volume=volume,
+                    cur_avg_price=price,
+                    cur_avg_cost=cost,
+                    cur_fee=1.0,
+                    roi=0.0,
+                    roi_pct=0.0,
+                    total_fee=1.0,
+                    leverage=1.0,
+                    time=time.time() + i
+                )
                 
-                await trades_cache.push_trade_list("ETH/USDT", "kraken", trade_data)
-                trades.append(trade_data)
+                await trades_cache.push_trade_list("ETH/USDT", "kraken", trade)
+                trades.append(trade)
                 
                 total_volume += volume
                 total_cost += cost
@@ -351,7 +378,7 @@ class TestOrderTradeAccountIntegration:
                 volume=total_volume,
                 price=avg_entry_price,
                 cost=total_cost,
-                fee=sum(trades[i].get('fee', 0) for i in range(len(trades))),
+                fee=sum(trades[i].fee for i in range(len(trades))),
                 ex_id="1"
             )
             
@@ -393,7 +420,7 @@ class TestBotCacheIntegration:
         try:
             # 1. Update ticker to establish current price
             tick = create_test_tick("BTC/USDT", "binance", 50000.0)
-            await tick_cache.update_ticker("binance", tick)
+            await tick_cache.set_ticker(tick)
             
             # 2. Bot 1 blocks the symbol for trading
             result = await bot_cache.block_exchange("binance", "BTC/USDT", "bot_1")

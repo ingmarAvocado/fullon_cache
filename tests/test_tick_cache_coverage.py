@@ -32,19 +32,34 @@ class TestTickCacheCoverage:
 
     @pytest.mark.asyncio
     async def test_update_ticker_edge_cases(self):
-        """Test update_ticker with edge cases."""
+        """Test set_ticker with edge case Tick objects."""
+        from fullon_orm.models import Tick
+        import time
+        
         cache = TickCache()
 
-        # Test with empty values dict
-        result = await cache.update_ticker("BTC/USDT", "binance", {})
+        # Test with minimal Tick object
+        tick = Tick(
+            symbol="BTC/USDT",
+            exchange="binance",
+            price=50000.0,
+            time=time.time()
+        )
+        result = await cache.set_ticker(tick)
         assert result is True  # Should still succeed
 
-        # Test with None values
-        result = await cache.update_ticker("BTC/USDT", "binance", {
-            "price": None,
-            "volume": None,
-            "time": None
-        })
+        # Test with Tick object containing None/zero values for optional fields
+        tick_with_nulls = Tick(
+            symbol="ETH/USDT",
+            exchange="binance",
+            price=3000.0,
+            volume=0.0,  # Zero volume
+            bid=None,    # None values for optional fields
+            ask=None,
+            last=3000.0,
+            time=time.time()
+        )
+        result = await cache.set_ticker(tick_with_nulls)
         assert result is True
 
     @pytest.mark.asyncio

@@ -36,8 +36,8 @@ class TestCleanTickCache:
             symbol = symbol_factory.create(symbol="BTC/USDT", exchange_name="binance")
             tick = self.create_test_tick(symbol, "binance", 50000.0)
             
-            # Test set_ticker
-            result = await cache.set_ticker(symbol, tick)
+            # Test set_ticker - API only takes tick object, not symbol
+            result = await cache.set_ticker(tick)
             assert result is True
             
         finally:
@@ -52,7 +52,7 @@ class TestCleanTickCache:
             # Setup: create and set ticker
             symbol = symbol_factory.create(symbol="BTC/USDT", exchange_name="binance")
             original_tick = self.create_test_tick(symbol, "binance", 50000.0)
-            await cache.set_ticker(symbol, original_tick)
+            await cache.set_ticker(original_tick)
             
             # Test: get ticker
             retrieved_tick = await cache.get_ticker(symbol)
@@ -94,11 +94,11 @@ class TestCleanTickCache:
             
             # Set initial ticker
             tick1 = self.create_test_tick(symbol, "binance", 50000.0, timestamp=1000.0)
-            await cache.set_ticker(symbol, tick1)
+            await cache.set_ticker(tick1)
             
             # Set newer ticker
             tick2 = self.create_test_tick(symbol, "binance", 51000.0, timestamp=2000.0)
-            await cache.set_ticker(symbol, tick2)
+            await cache.set_ticker(tick2)
             
             # get_next_ticker should return the most recent (tick2)
             next_tick = await cache.get_next_ticker(symbol)
@@ -121,7 +121,7 @@ class TestCleanTickCache:
             
             # Set ticker only on kraken
             tick = self.create_test_tick(symbol_kraken, "kraken", 50500.0)
-            await cache.set_ticker(symbol_kraken, tick)
+            await cache.set_ticker(tick)
             
             # get_any_ticker with binance symbol should find kraken ticker
             found_tick = await cache.get_any_ticker(symbol_binance)
@@ -158,9 +158,9 @@ class TestCleanTickCache:
             btc_kraken = symbol_factory.create(symbol="BTC/USDT", exchange_name="kraken", cat_ex_id=2)
             
             # Set tickers
-            await cache.set_ticker(btc_binance, self.create_test_tick(btc_binance, "binance", 50000.0))
-            await cache.set_ticker(eth_binance, self.create_test_tick(eth_binance, "binance", 3000.0))
-            await cache.set_ticker(btc_kraken, self.create_test_tick(btc_kraken, "kraken", 50100.0))
+            await cache.set_ticker(self.create_test_tick(btc_binance, "binance", 50000.0))
+            await cache.set_ticker(self.create_test_tick(eth_binance, "binance", 3000.0))
+            await cache.set_ticker(self.create_test_tick(btc_kraken, "kraken", 50100.0))
             
             # Get all binance tickers
             binance_tickers = await cache.get_all_tickers(exchange_name="binance")
@@ -189,9 +189,9 @@ class TestCleanTickCache:
             symbol3 = symbol_factory.create(symbol="BTC/USDT", exchange_name="kraken", cat_ex_id=2)
             
             # Set tickers
-            await cache.set_ticker(symbol1, self.create_test_tick(symbol1, "binance", 50000.0))
-            await cache.set_ticker(symbol2, self.create_test_tick(symbol2, "binance", 3000.0))
-            await cache.set_ticker(symbol3, self.create_test_tick(symbol3, "kraken", 50100.0))
+            await cache.set_ticker(self.create_test_tick(symbol1, "binance", 50000.0))
+            await cache.set_ticker(self.create_test_tick(symbol2, "binance", 3000.0))
+            await cache.set_ticker(self.create_test_tick(symbol3, "kraken", 50100.0))
             
             # Get all tickers for cat_ex_id=1
             cat1_tickers = await cache.get_all_tickers(cat_ex_id=1)
@@ -226,7 +226,7 @@ class TestCleanTickCache:
             # Setup: create and set ticker
             symbol = symbol_factory.create(symbol="BTC/USDT", exchange_name="binance")
             tick = self.create_test_tick(symbol, "binance", 50000.0)
-            await cache.set_ticker(symbol, tick)
+            await cache.set_ticker(tick)
             
             # Verify ticker exists
             retrieved = await cache.get_ticker(symbol)
@@ -254,8 +254,8 @@ class TestCleanTickCache:
             eth_symbol = symbol_factory.create(symbol="ETH/USDT", exchange_name="binance", cat_ex_id=1)
             
             # Set tickers
-            await cache.set_ticker(btc_symbol, self.create_test_tick(btc_symbol, "binance", 50000.0))
-            await cache.set_ticker(eth_symbol, self.create_test_tick(eth_symbol, "binance", 3000.0))
+            await cache.set_ticker(self.create_test_tick(btc_symbol, "binance", 50000.0))
+            await cache.set_ticker(self.create_test_tick(eth_symbol, "binance", 3000.0))
             
             # Verify tickers exist
             btc_tick = await cache.get_ticker(btc_symbol)
@@ -286,11 +286,11 @@ class TestCleanTickCache:
             
             # Set ticker with older timestamp
             old_tick = self.create_test_tick(symbol, "binance", 50000.0, timestamp=1000.0)
-            await cache.set_ticker(symbol, old_tick)
+            await cache.set_ticker(old_tick)
             
             # Set ticker with newer timestamp
             new_tick = self.create_test_tick(symbol, "binance", 51000.0, timestamp=2000.0)
-            await cache.set_ticker(symbol, new_tick)
+            await cache.set_ticker(new_tick)
             
             # get_ticker should return the most recent
             current_tick = await cache.get_ticker(symbol)
@@ -328,7 +328,7 @@ class TestCleanTickCache:
             async def publish_after_delay():
                 await asyncio.sleep(0.1)  # Small delay
                 tick = self.create_test_tick(symbol, "binance", 52000.0)
-                await cache.set_ticker(symbol, tick)
+                await cache.set_ticker(tick)
             
             # Start publisher task
             publisher_task = asyncio.create_task(publish_after_delay())
@@ -365,7 +365,7 @@ class TestCleanTickCache:
             tick = self.create_test_tick(symbol, "binance", 50000.0)
             
             # Operations should handle the error gracefully
-            result = await cache.set_ticker(symbol, tick)
+            result = await cache.set_ticker(tick)
             assert result is False  # Should return False on error
             
             retrieved = await cache.get_ticker(symbol)
@@ -396,7 +396,7 @@ class TestCleanTickCache:
             tasks = []
             for i, symbol in enumerate(symbols):
                 tick = self.create_test_tick(symbol, "binance", 50000.0 + i)
-                task = cache.set_ticker(symbol, tick)
+                task = cache.set_ticker(tick)
                 tasks.append(task)
             
             results = await asyncio.gather(*tasks, return_exceptions=True)
