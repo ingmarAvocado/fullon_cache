@@ -69,6 +69,8 @@ class OrdersCache(BaseCache):
     def __init__(self):
         """Initialize the orders cache."""
         super().__init__()
+        # For backward compatibility - some tests access cache._cache
+        self._cache = self
 
     async def push_open_order(self, oid: str, local_oid: str) -> None:
         """Push order ID to a Redis list.
@@ -461,23 +463,4 @@ class OrdersCache(BaseCache):
             return None
 
     # Legacy compatibility methods
-    async def save_order_data_legacy(self, ex_id: str, oid: str, data: dict = {}) -> None:
-        """Legacy method for backward compatibility.
-        
-        Args:
-            ex_id: The exchange ID
-            oid: The order ID
-            data: Order data dictionary
-            
-        Returns:
-            None
-            
-        Raises:
-            Exception: If there was an error saving to Redis
-        """
-        try:
-            await self.save_order_data(ex_id, oid, data)
-        except Exception as e:
-            logger.exception(f"Error saving order data to Redis: {e}")
-            raise Exception("Error saving order status to Redis") from e
 

@@ -2,6 +2,7 @@
 
 import json
 import asyncio
+import time
 from typing import Union
 
 from fullon_log import get_component_logger
@@ -291,7 +292,7 @@ class TickCache(BaseCache):
             logger.error("Failed to get any ticker", error=str(e), symbol=symbol.symbol)
             return None
 
-    async def get_all_tickers(self, exchange_name: str = None, cat_ex_id: int = None) -> list[Tick]:
+    async def get_all_tickers(self, exchange_name: str = "", cat_ex_id: int = None) -> list[Tick]:
         """Get all tickers, optionally filtered by exchange.
         
         Args:
@@ -403,66 +404,7 @@ class TickCache(BaseCache):
             logger.error("Failed to delete exchange tickers", error=str(e), exchange=exchange_name)
             return 0
 
-    # Additional methods expected by tests
-    
-    async def get_price_tick(self, symbol: str, exchange: str = None) -> Tick | None:
-        """Get full tick data (not just price) - legacy method.
-        
-        Args:
-            symbol: Trading symbol  
-            exchange: Exchange name (optional)
-            
-        Returns:
-            fullon_orm Tick object or None if not found
-        """
-        try:
-            # Create temporary Symbol object for compatibility
-            try:
-                from ..tests.factories import SymbolFactory
-                factory = SymbolFactory()
-                temp_symbol = factory.create(symbol=symbol, exchange_name=exchange or "binance")
-            except ImportError:
-                from fullon_orm.models import Symbol as ORMSymbol
-                temp_symbol = ORMSymbol(
-                    symbol=symbol, 
-                    cat_ex_id=1, 
-                    base=symbol.split('/')[0] if '/' in symbol else symbol, 
-                    quote=symbol.split('/')[1] if '/' in symbol else 'USDT'
-                )
-                temp_symbol._cached_exchange_name = exchange or "binance"
-            
-            if exchange:
-                return await self.get_ticker(temp_symbol)
-            else:
-                return await self.get_any_ticker(temp_symbol)
-                
-        except Exception as e:
-            logger.error("Failed to get price tick", error=str(e), symbol=symbol)
-            return None
-
-    async def get_ticker_any(self, symbol: str) -> float:
-        """Legacy method: gets ticker from any exchange by trying multiple exchanges."""
-        try:
-            # Search across multiple exchanges like the old implementation
-            exchanges = ["binance", "kraken", "coinbase", "bitfinex", "bybit"]
-            
-            for exchange_name in exchanges:
-                try:
-                    tick_json = await self.hget(f"tickers:{exchange_name}", symbol)
-                    if tick_json:
-                        tick_data = json.loads(tick_json)
-                        return float(tick_data.get('price', 0.0))
-                        
-                except (json.JSONDecodeError, TypeError, ValueError):
-                    continue
-            
-            return 0.0
-            
-        except Exception as e:
-            logger.error("Failed to get ticker any", error=str(e), symbol=symbol)
-            return 0.0
-
-    async def get_tickers(self, exchange: str = None) -> list[Tick]:
+    async def get_tickers(self, exchange: str = "") -> list[Tick]:
         """Legacy method: get all tickers."""
         return await self.get_all_tickers(exchange_name=exchange)
 
@@ -470,68 +412,51 @@ class TickCache(BaseCache):
         """Legacy method: delete all tickers for exchange."""
         return await self.delete_exchange_tickers(exchange)
 
-    # Legacy compatibility methods (temporary)
-    
-    async def get_price(self, symbol: str, exchange: str = None) -> float:
-        """Legacy method: get price as float."""
-        try:
-            # Create a temporary Symbol object for compatibility
-            try:
-                from ..tests.factories import SymbolFactory
-            except ImportError:
-                # Fallback for when tests module isn't available
-                from fullon_orm.models import Symbol as ORMSymbol
-                temp_symbol = ORMSymbol(symbol=symbol, cat_ex_id=1, base=symbol.split('/')[0] if '/' in symbol else symbol, quote=symbol.split('/')[1] if '/' in symbol else 'USDT')
-                temp_symbol._cached_exchange_name = exchange or "binance"
-            else:
-                factory = SymbolFactory()
-                temp_symbol = factory.create(symbol=symbol, exchange_name=exchange or "binance")
+    async def update_ticker(self, symbol: str, exchange: str, ticker_data: dict) -> bool:
+        """Update ticker data for symbol/exchange.
+        
+        Args:
+            symbol: Trading symbol (e.g. "BTC/USDT") 
+            exchange: Exchange name (e.g. "binance")
+            ticker_data: Dictionary with ticker data (price, volume, etc.)
             
-            tick = await self.get_ticker(temp_symbol) if exchange else await self.get_any_ticker(temp_symbol)
-            return tick.price if tick else 0.0
-            
-        except Exception as e:
-            logger.error("Failed to get price", error=str(e), symbol=symbol)
-            return 0.0
-
-    async def update_ticker(self, exchange_or_symbol: str, tick_or_exchange: Union[Tick, str], ticker_data: dict = None) -> bool:
-        """Legacy method: backward compatibility for old signature."""
+        Returns:
+            True if successful, False otherwise
+        """
         try:
-            if isinstance(tick_or_exchange, Tick):
-                # New signature: update_ticker(exchange, tick)
-                exchange = exchange_or_symbol
-                tick = tick_or_exchange
-            else:
-                # Legacy signature: update_ticker(symbol, exchange, ticker_data)
-                symbol_name = exchange_or_symbol
-                exchange = tick_or_exchange
-                
-                # Create Tick object from legacy data - handle None values
-                tick_dict = {
-                    'symbol': symbol_name,
-                    'exchange': exchange,
-                    'price': ticker_data.get('price') or 0.0,
-                    'volume': ticker_data.get('volume') or 0.0,
-                    'time': ticker_data.get('time') or 0.0,
-                    'bid': ticker_data.get('bid') or 0.0,
-                    'ask': ticker_data.get('ask') or 0.0,
-                    'last': ticker_data.get('last') or 0.0
-                }
-                tick = Tick.from_dict(tick_dict)
+            # Create Tick object from ticker data
+            tick = Tick(
+                symbol=symbol,
+                exchange=exchange,
+                price=ticker_data.get('price', 0.0),
+                volume=ticker_data.get('volume', 0.0),
+                time=ticker_data.get('time', time.time()),
+                bid=ticker_data.get('bid', 0.0),
+                ask=ticker_data.get('ask', 0.0),
+                last=ticker_data.get('last', ticker_data.get('price', 0.0))
+            )
             
             # Create temporary Symbol object
             try:
-                from ..tests.factories import SymbolFactory
-                factory = SymbolFactory()
-                symbol = factory.create(symbol=tick.symbol, exchange_name=tick.exchange)
-            except ImportError:
-                # Fallback for when tests module isn't available
                 from fullon_orm.models import Symbol as ORMSymbol
-                symbol = ORMSymbol(symbol=tick.symbol, cat_ex_id=1, base=tick.symbol.split('/')[0] if '/' in tick.symbol else tick.symbol, quote=tick.symbol.split('/')[1] if '/' in tick.symbol else 'USDT')
-                symbol._cached_exchange_name = tick.exchange
+                temp_symbol = ORMSymbol(
+                    symbol=symbol,
+                    cat_ex_id=1,
+                    base=symbol.split('/')[0] if '/' in symbol else symbol,
+                    quote=symbol.split('/')[1] if '/' in symbol else 'USDT'
+                )
+                temp_symbol._cached_exchange_name = exchange
+            except Exception:
+                # Fallback if ORM import fails
+                class TempSymbol:
+                    def __init__(self, symbol):
+                        self.symbol = symbol
+                        self._cached_exchange_name = exchange
+                temp_symbol = TempSymbol(symbol)
             
-            return await self.set_ticker(symbol, tick)
+            return await self.set_ticker(temp_symbol, tick)
             
         except Exception as e:
-            logger.error("Failed to update ticker", error=str(e))
+            logger.error(f"Failed to update ticker: {e}")
             return False
+

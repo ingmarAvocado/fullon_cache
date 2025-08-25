@@ -53,6 +53,8 @@ class AccountCache(BaseCache):
     def __init__(self):
         """Initialize account cache inheriting from BaseCache."""
         super().__init__()
+        # For backward compatibility - some tests access cache._cache
+        self._cache = self
 
     async def upsert_positions(
         self,
@@ -370,35 +372,4 @@ class AccountCache(BaseCache):
         return await self.get_all_positions()
 
     # Legacy compatibility methods
-    async def upsert_positions_legacy(self, ex_id: int, positions: dict[str, dict[str, float]], update_date: bool = False) -> bool:
-        """Legacy method for backward compatibility.
-        
-        Args:
-            ex_id: Exchange ID
-            positions: Dictionary of positions
-            update_date: Whether to update timestamp
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            # Convert dict format to Position models
-            position_models = []
-            for symbol, pos_data in positions.items():
-                position = Position(
-                    symbol=symbol,
-                    cost=pos_data.get('cost', 0.0),
-                    volume=pos_data.get('volume', 0.0),
-                    fee=pos_data.get('fee', 0.0),
-                    price=pos_data.get('price', 0.0),
-                    timestamp=datetime.now(UTC).timestamp(),
-                    ex_id=str(ex_id)
-                )
-                position_models.append(position)
-            
-            # Use the new ORM method
-            return await self.upsert_positions(ex_id, position_models, update_date)
-        except Exception as e:
-            logger.error(f"Failed to upsert positions (legacy): {e}")
-            return False
 

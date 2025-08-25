@@ -40,6 +40,8 @@ class OHLCVCache(BaseCache):
     def __init__(self):
         """Initialize the OHLCV cache."""
         super().__init__()
+        # For backward compatibility - some tests access cache._cache
+        self._cache = self
 
     async def update_ohlcv_bars(self, symbol: str, timeframe: str, bars: list[list[float]]) -> None:
         """Store OHLCV bars for a symbol/timeframe.

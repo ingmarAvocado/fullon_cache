@@ -62,6 +62,8 @@ class TradesCache(BaseCache):
     def __init__(self):
         """Initialize the trades cache."""
         super().__init__()
+        # For backward compatibility - some tests access cache._cache
+        self._cache = self
 
     async def push_trade_list(
         self,
@@ -494,20 +496,4 @@ class TradesCache(BaseCache):
                 logger.error(f"Failed to pop user trade: {e}")
             return None
 
-    # Legacy compatibility methods
-    async def push_trade_list_legacy(self, symbol: str, exchange: str, trade: dict = {}) -> int:
-        """Legacy method for backward compatibility."""
-        return await self.push_trade_list(symbol, exchange, trade)
-
-    async def push_my_trades_list_legacy(self, uid: str, exchange: str, trade: dict = {}) -> int:
-        """Legacy method for backward compatibility."""
-        return await self.push_my_trades_list(uid, exchange, trade)
-
-    async def get_trades_list_legacy(self, symbol: str, exchange: str) -> list[dict[str, Any]]:
-        """Legacy method for backward compatibility."""
-        return await self.get_trades_list(symbol, exchange)
-
-    async def pop_my_trade_legacy(self, uid: str, exchange: str, timeout: int = 0) -> dict[str, Any] | None:
-        """Legacy method for backward compatibility."""
-        return await self.pop_my_trade(uid, exchange, timeout)
 

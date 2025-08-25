@@ -152,7 +152,7 @@ __all__ = [
     "EventLoopPolicy",
     # Documentation
     "docs",
-    "examples",
+    # Note: "examples" removed to avoid circular imports
 ]
 
 # Configure logging for fullon_cache
@@ -179,8 +179,9 @@ configure_logger(
 )
 
 # Import all cache modules for easy access
-# Make examples available
-from . import examples
+# Note: examples module is not imported by default to avoid circular imports
+# when running examples directly. Import explicitly if needed:
+# from fullon_cache import examples
 from .account_cache import AccountCache
 from .base_cache import BaseCache
 from .bot_cache import BotCache
@@ -198,3 +199,6 @@ from .orders_cache import OrdersCache
 from .process_cache import ProcessCache
 from .tick_cache import TickCache
 from .trades_cache import TradesCache
+
+# Examples module (available for import but not auto-loaded)
+from . import examples

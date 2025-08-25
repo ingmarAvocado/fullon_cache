@@ -57,19 +57,12 @@ class TestImports:
         assert ConnectionError is not None
         assert StreamError is not None
 
-    def test_import_docs(self):
-        """Test importing documentation module."""
-        from fullon_cache import docs
-        assert docs is not None
-        assert hasattr(docs, 'get_all_docs')
-        assert hasattr(docs, 'QUICKSTART')  # It's QUICKSTART constant, not quickstart
-
     def test_import_examples(self):
         """Test importing examples module."""
         from fullon_cache import examples
         assert examples is not None
         assert hasattr(examples, 'get_all_examples')
-        assert hasattr(examples, 'basic_usage')
+        # Note: basic_usage was removed as it was legacy code
 
     def test_main_package_exports(self):
         """Test that main package exports all expected items."""
@@ -87,8 +80,8 @@ class TestImports:
             'CacheError',
             'ConnectionError',
             'StreamError',
-            'docs',
             'examples',
+            # Note: 'docs' removed as it was legacy
         ]
 
         for export in expected_exports:

@@ -48,6 +48,8 @@ class BotCache(BaseCache):
     def __init__(self):
         """Initialize the bot cache."""
         super().__init__()
+        # For backward compatibility - some tests access cache._cache
+        self._cache = self
 
     async def is_blocked(self, ex_id: str, symbol: str) -> str:
         """Check if exchange/symbol is blocked.
