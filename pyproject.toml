@@ -1,6 +1,6 @@
 [project]
 name = "fullon-cache"
-version = "0.5.1"
+version = "0.5.2"
 description = "Cache module for Fullon trading system"
 authors = [
     {name = "Fullon Project"}
@@ -9,7 +9,7 @@ license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.13,<4.0"
 dependencies = [
-    "fullon-orm @ git+ssh://git@github.com/ingmarAvocado/fullon_orm.git",
+    "fullon-orm @ git+ssh://git@github.com/ingmarAvocado/fullon_orm.git@main",
     "redis[hiredis] (>=6.2.0,<7.0.0)",
     "fullon-log @ git+ssh://git@github.com/ingmarAvocado/fullon_log.git"
 ]
