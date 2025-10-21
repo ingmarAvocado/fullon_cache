@@ -804,62 +804,54 @@ def mock_database_connection_only():
         MockCatExchange("kraken", 2)
     ]
     
-    # Mock only the database session to return real exchanges
-    # We need to patch in multiple places due to different import patterns
-    patches = [
-        patch('fullon_orm.get_async_session'),
-        patch('fullon_orm.database.get_async_session', create=True),
-        # Also patch the specific cache modules that import it at module level
-    ]
-    
-    # Apply all patches
-    with patches[0] as mock_session1, patches[1] as mock_session2:
-        # Create a simple mock that avoids async generator issues entirely
-        class MockAsyncSessionGenerator:
-            def __init__(self):
-                self.session_mock = Mock()
-                self._exhausted = False
-                
-            def __aiter__(self):
-                return self
-                
-            async def __anext__(self):
-                if self._exhausted:
-                    raise StopAsyncIteration
-                self._exhausted = True
-                return self.session_mock
-                
-            async def aclose(self):
-                # Proper cleanup method
-                pass
-                    
-        def mock_get_async_session():
-            """Mock function that returns a properly managed async generator."""
-            return MockAsyncSessionGenerator()
-        
-        # Assign the function to all patches
-        for mock_session in [mock_session1, mock_session2]:
-            mock_session.side_effect = mock_get_async_session
-        
-        # Mock repositories to return real exchange data
-        with patch('fullon_orm.repositories.ExchangeRepository') as mock_ex_repo_class:
-            mock_ex_repo = Mock()
-            
-            # Set async methods properly - be very explicit
-            async def mock_get_cat_exchanges(all=True):
-                return test_exchanges
-            
-            async def mock_get_exchange_by_name(name):
-                for ex in test_exchanges:
-                    if ex.name == name:
-                        return ex
-                return None
-                
-            mock_ex_repo.get_cat_exchanges = mock_get_cat_exchanges
-            mock_ex_repo.get_exchange_by_name = mock_get_exchange_by_name
-            mock_ex_repo_class.return_value = mock_ex_repo
-            
-            yield
+    # Mock DatabaseContext to return real exchange data
+    # We need to patch DatabaseContext which is the new API
+    with patch('fullon_orm.DatabaseContext') as mock_db_context_class:
+        # Create a mock DatabaseContext instance
+        mock_db_instance = Mock()
+
+        # Create mock repository
+        mock_ex_repo = Mock()
+
+        # Set async methods properly - be very explicit
+        async def mock_get_cat_exchanges(all=True):
+            return test_exchanges
+
+        async def mock_get_exchange_by_name(name):
+            for ex in test_exchanges:
+                if ex.name == name:
+                    return ex
+            return None
+
+        mock_ex_repo.get_cat_exchanges = mock_get_cat_exchanges
+        mock_ex_repo.get_exchange_by_name = mock_get_exchange_by_name
+
+        # Set up the exchanges property on the DatabaseContext
+        mock_db_instance.exchanges = mock_ex_repo
+
+        # Mock commit, rollback, flush
+        async def mock_commit():
+            pass
+        async def mock_rollback():
+            pass
+        async def mock_flush():
+            pass
+
+        mock_db_instance.commit = mock_commit
+        mock_db_instance.rollback = mock_rollback
+        mock_db_instance.flush = mock_flush
+
+        # Make DatabaseContext a proper async context manager
+        async def mock_aenter(self):
+            return mock_db_instance
+
+        async def mock_aexit(self, exc_type, exc_val, exc_tb):
+            pass
+
+        mock_db_context_class.return_value.__aenter__ = mock_aenter
+        mock_db_context_class.return_value.__aexit__ = mock_aexit
+
+        yield
 
 
 # Async utilities for tests
